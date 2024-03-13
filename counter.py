@@ -273,6 +273,13 @@ class ObjectCounter:
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                     
                 self.excel_created = True
+                df1 = df.groupby(['Entered','Exited'])['Entered'].count()
+                # Convert df1 rows to columns
+                df1 = df1.unstack(fill_value=0)
+                df1 = df1.reset_index()
+                # Concat unstacked df1 to df at row 1 after data, give a gap of 1 column
+                df = pd.concat([df.iloc[:, :-1], df1], axis=1)
+
                 df.to_excel("object_info.xlsx", index=False)
 
 
