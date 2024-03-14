@@ -1,5 +1,3 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-
 from collections import defaultdict
 
 import cv2
@@ -7,11 +5,14 @@ import time # DWELL TIME
 from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
 import pandas as pd
+from pandas import ExcelWriter
 
 ENTRY_THRESHOLD = 5
 EXIT_THRESHOLD = 5
 
 check_requirements("shapely>=2.0.0")
+
+# writer = ExcelWriter('object_info.xlsx', engine='openpyxl', mode='a')
 
 from shapely.geometry import LineString, Point, Polygon
 
@@ -49,15 +50,11 @@ class ObjectCounter:
         self.im0 = None
         self.tf = None
         self.view_img = False
-        # self.view_in_counts = True
-        # self.view_out_counts = True
 
         self.names = None  # Classes names
         self.annotator = None  # Annotator
 
         # Object counting Information
-        self.in_counts = 0
-        self.out_counts = 0
         self.counting_list = []
         self.count_txt_thickness = 0
         self.count_txt_color = (0, 0, 0)
@@ -80,7 +77,7 @@ class ObjectCounter:
 
         # Frame counter
         self.frame_count = 0
-        self.excel_created = False
+        self.last_saved_frame = 0
 
     def set_args(
         self,
@@ -90,8 +87,6 @@ class ObjectCounter:
         line_thickness=2,
         track_thickness=2,
         view_img=False,
-        view_in_counts=True,
-        view_out_counts=True,
         draw_tracks=False,
         count_txt_thickness=2,
         count_txt_color=(0, 0, 0),
@@ -104,6 +99,7 @@ class ObjectCounter:
         fps = 30,
         track_length = 30,
         buffer_size = 10, # in percent
+        save_frames = 0,
         total_frames = 0
     ):
         """
@@ -112,8 +108,6 @@ class ObjectCounter:
         Args:
             line_thickness (int): Line thickness for bounding boxes.
             view_img (bool): Flag to control whether to display the video stream.
-            view_in_counts (bool): Flag to control whether to display the incounts on video stream.
-            view_out_counts (bool): Flag to control whether to display the outcounts on video stream.
             reg_pts (list): Initial list of points defining the counting region.
             classes_names (dict): Classes names
             track_thickness (int): Track thickness
@@ -128,44 +122,46 @@ class ObjectCounter:
         """
         self.tf = line_thickness
         self.view_img = view_img
-        self.view_in_counts = view_in_counts
-        self.view_out_counts = view_out_counts
         self.track_thickness = track_thickness
         self.draw_tracks = draw_tracks
         self.width = width
         self.height = height
         self.fps = fps
         self.track_length = track_length
-        self.total_frames = total_frames
+        self.save_frames = save_frames
 
         # Region and line selection
+        print("Region Analysis Initiated.")
+        print("Region Dimensions: ", width,"x", height)
+        print("FPS: ", fps)
+        print("Total Frames in video (0 for stream): ", total_frames)
+        print("Buffer Size: ", buffer_size)
+
         if reg_pts and len(reg_pts) >= 0:
-            print("Region Counter Initiated.")
             x1 = reg_pts[0][0]
             x2 = reg_pts[1][0]
             y1 = reg_pts[0][1]
             y2 = reg_pts[2][1]
             
-            new_x1 = x1 + (x1 * buffer_size / 100)
-            new_x2 = x2 - (x2 * buffer_size / 100)
-            new_y1 = y1 + (y1 * buffer_size / 100)
-            new_y2 = y2 - (y2 * buffer_size / 100)
+            new_x1 = x1 + ((x2-x1) * buffer_size / 100)
+            new_y1 = y1 + ((y2-y1) * buffer_size / 100)
+            new_x2 = x2 - ((x2-x1) * buffer_size / 100)
+            new_y2 = y2 - ((y2-y1) * buffer_size / 100)
             
             self.reg_pts = [(new_x1, new_y1), (new_x2, new_y1), (new_x2, new_y2), (new_x1, new_y2)]
             
             self.counting_region = Polygon(self.reg_pts)
         else:
-            print("None region")
             x1 = 0
             x2 = self.width
             y1 = 0
             y2 = self.height
             
+            new_x1 = x1 + ((x2-x1) * buffer_size / 100)
+            new_y1 = y1 + ((y2-y1) * buffer_size / 100)
+            new_x2 = x2 - ((x2-x1) * buffer_size / 100)
+            new_y2 = y2 - ((y2-y1) * buffer_size / 100)
             
-            new_x1 = x1 + (x1 * buffer_size / 100)
-            new_x2 = x2 - (x2 * buffer_size / 100)
-            new_y1 = y1 + (y1 * buffer_size / 100)
-            new_y2 = y2 - (y2 * buffer_size / 100)
             # Set reg_pts to width and height in xyxy format
             #self.reg_pts = [(0, 0), (self.width, 0), (self.width, self.height), (0, self.height)]
             self.reg_pts = [(new_x1, new_y1), (new_x2, new_y1), (new_x2, new_y2), (new_x1, new_y2)]
@@ -181,15 +177,63 @@ class ObjectCounter:
         self.region_thickness = region_thickness
         self.line_dist_thresh = line_dist_thresh
 
+    def save_object_info(self):
+         #Store object info in a dataframe and store in excel when the video ends
+        if self.frame_count >= self.save_frames and self.frame_count // self.save_frames > self.last_saved_frame // self.save_frames:
+            print("Saving object info to excel")
+            df = pd.DataFrame(columns=['ID', 'Entry Frame', 'Frame Count', 'Exit Frame', 'Tracking History' ,'Dwell Time', 'Entered', 'Exited'])
+            for track_id in self.object_info:
+                new_row = {'ID': track_id, 'Entry Frame': self.object_info[track_id].entry_frame, 'Frame Count': self.object_info[track_id].frame_count, 'Exit Frame': self.object_info[track_id].exit_frame, 'Tracking History': self.object_info[track_id].track_history, 'Dwell Time': self.object_info[track_id].dwell_time, 'Entered': self.object_info[track_id].entered, 'Exited': self.object_info[track_id].exited}
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                
+            self.last_saved_frame = self.frame_count
+            self.excel_created = True
+            df1 = df.groupby(['Entered','Exited'])['Entered'].count()
+            # Convert df1 rows to columns
+            df1 = df1.unstack(fill_value=0)
+            df1 = df1.reset_index()
+            # Concat unstacked df1 to df at row 1 after data, give a gap of -1 column
+            df = pd.concat([df, df1], axis=1)
+            if (self.frame_count//self.save_frames) == 1:
+                mode  = 'w'
+            else:
+                mode = 'a'
+
+            with pd.ExcelWriter('object_info.xlsx', engine='openpyxl', mode=mode) as writer:
+                df.to_excel(writer, sheet_name=f'sheet_{self.frame_count//self.save_frames}', index=False)
+                print("Count: ", self.frame_count//self.save_frames, " Excel saved")
+
     def extract_and_process_tracks(self, tracks):
+
+        inst_count = global_in_count =0
+
+        # Display the count
+        cv2.putText(self.im0, f"Count: {global_in_count}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
+
+        # Display frame count in the bottom right corner
+        cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width-300, self.height-50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
+
+        # Display instance count in the top center
+        inst_count = len (tracks[0].boxes)
+        cv2.putText(self.im0, f"People In Frame: {inst_count}", (self.width-700, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
+        
+        # Annotator Init and region drawing
+        self.annotator = Annotator(self.im0, self.tf, self.names)
+        self.annotator.draw_region(reg_pts=self.reg_pts, color=self.region_color, thickness=self.region_thickness)
+
+        self.save_object_info()
+
+        if tracks[0].boxes.id is None:
+            return
+        
         """Extracts and processes tracks for object counting in a video stream."""
         boxes = tracks[0].boxes.xyxy.cpu()
         clss = tracks[0].boxes.cls.cpu().tolist()
         track_ids = tracks[0].boxes.id.int().cpu().tolist()
 
-        # Annotator Init and region drawing
-        self.annotator = Annotator(self.im0, self.tf, self.names)
-        self.annotator.draw_region(reg_pts=self.reg_pts, color=self.region_color, thickness=self.region_thickness)
+        # # Annotator Init and region drawing
+        # self.annotator = Annotator(self.im0, self.tf, self.names)
+        # self.annotator.draw_region(reg_pts=self.reg_pts, color=self.region_color, thickness=self.region_thickness)
 
         # Extract tracks
         for box, track_id, cls in zip(boxes, track_ids, clss):
@@ -198,7 +242,6 @@ class ObjectCounter:
 
             # Draw Tracks
             track_line = self.object_info[track_id].track_history
-            #track_line = self.track_history[track_id]
             track_line.append((float((box[0] + box[2]) / 2), float((box[1] + box[3]) / 2)))
             if len(track_line) > self.track_length:
                 track_line.pop(0)
@@ -207,7 +250,7 @@ class ObjectCounter:
                 # If the object is not already in the counting list, record the current time
                 if self.object_info[track_id].entry_frame is None:
                     self.object_info[track_id].entry_frame = self.frame_count
-                    
+
                 self.object_info[track_id].frame_count += 1
                 if (self.object_info[track_id].frame_count/self.fps) > ENTRY_THRESHOLD:
                     self.counting_list.append(track_id)
@@ -229,7 +272,6 @@ class ObjectCounter:
                 )
 
             prev_position = self.object_info[track_id].track_history[-2] if len(self.object_info[track_id].track_history) > 1 else None
-            #prev_position = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
 
             if (
                 prev_position is not None
@@ -237,12 +279,6 @@ class ObjectCounter:
                 and track_id not in self.counting_list
             ):
                 pass
-                # if(dwell_time > ENTRY_THRESHOLD):
-                #     self.counting_list.append(track_id)
-                #     if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) > 0:
-                #         self.in_counts += 1
-                #     else:
-                #         self.out_counts += 1
             elif (
                 prev_position is None
                 and self.counting_region.contains(Point(track_line[-1]))
@@ -251,65 +287,20 @@ class ObjectCounter:
                 pass
                 # Case where person was detected in the region for the first time
 
-        count = 0
+        global_in_count= count = 0
         # Increment "count" where entered flag is True
         for track_id in self.object_info:
             if self.object_info[track_id].entered is True:
                 count += 1
-                
+                global_in_count += 1
+
         # Display the count
         cv2.putText(self.im0, f"Count: {count}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
 
-        # Display frame count in the bottom right corner
-        cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width-300, self.height-50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
-
-        #Store object info in a dataframe and store in excel when the video ends
-        if self.frame_count >= self.total_frames:
-            if not self.excel_created:
-                print("Saving object info to excel")
-                df = pd.DataFrame(columns=['ID', 'Entry Frame', 'Frame Count', 'Exit Frame', 'Tracking History' ,'Dwell Time', 'Entered', 'Exited'])
-                for track_id in self.object_info:
-                    new_row = {'ID': track_id, 'Entry Frame': self.object_info[track_id].entry_frame, 'Frame Count': self.object_info[track_id].frame_count, 'Exit Frame': self.object_info[track_id].exit_frame, 'Tracking History': self.object_info[track_id].track_history, 'Dwell Time': self.object_info[track_id].dwell_time, 'Entered': self.object_info[track_id].entered, 'Exited': self.object_info[track_id].exited}
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                    
-                self.excel_created = True
-                df1 = df.groupby(['Entered','Exited'])['Entered'].count()
-                # Convert df1 rows to columns
-                df1 = df1.unstack(fill_value=0)
-                df1 = df1.reset_index()
-                # Concat unstacked df1 to df at row 1 after data, give a gap of 1 column
-                df = pd.concat([df.iloc[:, :-1], df1], axis=1)
-
-                df.to_excel("object_info.xlsx", index=False)
+        # # Display frame count in the bottom right corner
+        # cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width-300, self.height-50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36,255,12), 2)
 
 
-        # Fix me: always display stats
-
-            # for track_id in self.object_info:
-            #     df = df.append({'ID': track_id, 'Entry Frame': self.object_info[track_id].entry_frame, 'Exit Frame': self.object_info[track_id].exit_frame, 'Dwell Time': self.object_info[track_id].dwell_time}, ignore_index=True)
-            # df.to_excel("object_info.xlsx", index=False)
-
-        # incount_label = f"In Count : {self.in_counts}"
-        # outcount_label = f"OutCount : {self.out_counts}"
-
-        # # Display counts based on user choice
-        # counts_label = None
-        # if not self.view_in_counts and not self.view_out_counts:
-        #     counts_label = None
-        # elif not self.view_in_counts:
-        #     counts_label = outcount_label
-        # elif not self.view_out_counts:
-        #     counts_label = incount_label
-        # else:
-        #     counts_label = f"{incount_label} {outcount_label}"
-
-        # if counts_label is not None:
-        #     self.annotator.count_labels(
-        #         counts=counts_label,
-        #         count_txt_size=self.count_txt_thickness,
-        #         txt_color=self.count_txt_color,
-        #         color=self.count_color,
-        #     )
 
     def display_frames(self):
         """Display frame."""
@@ -331,10 +322,6 @@ class ObjectCounter:
         self.im0 = im0  # store image
         self.frame_count += 1
 
-        if tracks[0].boxes.id is None:
-            if self.view_img:
-                self.display_frames()
-            return im0
         self.extract_and_process_tracks(tracks)
 
         if self.view_img:
