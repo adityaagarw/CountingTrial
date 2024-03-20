@@ -1,3 +1,6 @@
 object_counting_output.avi
 object_info.xlsx
 yolov8n.pt
+yolov8x.pt
+*.pt
+*.xlsx

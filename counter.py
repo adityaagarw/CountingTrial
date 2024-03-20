@@ -100,7 +100,8 @@ class ObjectCounter:
         track_length = 30,
         buffer_size = 10, # in percent
         save_frames = 0,
-        total_frames = 0
+        total_frames = 0,
+        counter_name = "Counter"
     ):
         """
         Configures the Counter's image, bounding box line thickness, and counting region points.
@@ -129,13 +130,19 @@ class ObjectCounter:
         self.fps = fps
         self.track_length = track_length
         self.save_frames = save_frames
+        self.counter_name = counter_name
 
         # Region and line selection
-        print("Region Analysis Initiated.")
-        print("Region Dimensions: ", width,"x", height)
+        print("--------------------------------------------------------------------")
+        print(self.counter_name + " Analysis Initiated.")
+        print("Stream/Video Dimensions: ", width,"x", height)
         print("FPS: ", fps)
         print("Total Frames in video (0 for stream): ", total_frames)
         print("Buffer Size: ", buffer_size)
+        print(reg_pts)
+        print("--------------------------------------------------------------------")
+
+        print("\n")
 
         if reg_pts and len(reg_pts) >= 0:
             x1 = reg_pts[0][0]
@@ -199,7 +206,8 @@ class ObjectCounter:
             else:
                 mode = 'a'
 
-            with pd.ExcelWriter('object_info.xlsx', engine='openpyxl', mode=mode) as writer:
+            excel_file = self.counter_name + ".xlsx"
+            with pd.ExcelWriter(excel_file, engine='openpyxl', mode=mode) as writer:
                 df.to_excel(writer, sheet_name=f'sheet_{self.frame_count//self.save_frames}', index=False)
                 print("Count: ", self.frame_count//self.save_frames, " Excel saved")
 
