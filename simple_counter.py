@@ -2,9 +2,11 @@ from collections import defaultdict
 
 import cv2
 import time
+import math
 from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
 import pandas as pd
+import numpy as np
 from pandas import ExcelWriter
 
 ENTRY_THRESHOLD = 1
@@ -24,6 +26,8 @@ class ObjectInfo:
         self.entered = False
         self.exited = False
         self.embedding = []
+        self.entry_started = False
+        self.exit_started = False
 
 class ObjectCounter:
     """A class to manage the counting of objects in a real-time video stream based on their tracks."""
@@ -71,7 +75,7 @@ class ObjectCounter:
         self.entry_count = 0
         self.exit_count = 0
 
-        self.backtrack_length = 10
+        self.backtrack_length = 14
 
     def set_args(
         self,
@@ -125,14 +129,18 @@ class ObjectCounter:
         if reg_pts and len(reg_pts) >= 0:
             x1 = reg_pts[0][0]
             x2 = reg_pts[1][0]
+            x3 = reg_pts[2][0]
+            x4 = reg_pts[3][0]
             y1 = reg_pts[0][1]
-            y2 = reg_pts[2][1]
+            y2 = reg_pts[1][1]
+            y3 = reg_pts[2][1]
+            y4 = reg_pts[3][1]
 
-            new_x1 = x1 + ((x2 - x1) * buffer_size / 100)
-            new_y1 = y1 + ((y2 - y1) * buffer_size / 100)
-            new_x2 = x2 - ((x2 - x1) * buffer_size / 100)
-            new_y2 = y2 - ((y2 - y1) * buffer_size / 100)
-            self.reg_pts = [(new_x1, new_y1), (new_x2, new_y1), (new_x2, new_y2), (new_x1, new_y2)]
+            # new_x1 = x1 + ((x2 - x1) * buffer_size / 100)
+            # new_y1 = y1 + ((y2 - y1) * buffer_size / 100)
+            # new_x2 = x2 - ((x2 - x1) * buffer_size / 100)
+            # new_y2 = y2 - ((y2 - y1) * buffer_size / 100)
+            self.reg_pts = [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
 
             self.counting_region = Polygon(self.reg_pts)
         else:
@@ -201,6 +209,63 @@ class ObjectCounter:
         direction = end_point[1] - start_point[1]
         return direction
 
+    def calculate_angle(self, line1, line2):
+        x1, y1 = line1[0]
+        x2, y2 = line1[1]
+        x3, y3 = line2[0]
+        x4, y4 = line2[1]
+
+        vector1 = (x2 - x1, y2 - y1)
+        vector2 = (x4 - x3, y4 - y3)
+
+        dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+        magnitude1 = math.sqrt(vector1[0] ** 2 + vector1[1] ** 2)
+        magnitude2 = math.sqrt(vector2[0] ** 2 + vector2[1] ** 2)
+
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0
+
+        angle = math.acos(dot_product / (magnitude1 * magnitude2))
+        angle_degrees = math.degrees(angle)
+
+        return angle_degrees
+
+    def orientation(self, p1, p2, p3):
+        val = (p2[1] - p1[1]) * (p3[0] - p2[0]) - (p2[0] - p1[0]) * (p3[1] - p2[1])
+        if val == 0:
+            return 0  # collinear
+        elif val > 0:
+            return 1  # clockwise
+        else:
+            return 2  # counterclockwise
+
+    def check_intersection(self, line1, line2):
+        p1 = line1[0]
+        q1 = line1[1]
+        p2 = line2[0]
+        q2 = line2[1]
+        """
+        Returns True if line segments 'p1q1' and 'p2q2' intersect.
+        """
+        # Find the four orientations needed for the general and
+        # special cases
+        o1 = self.orientation(p1, q1, p2)
+        o2 = self.orientation(p1, q1, q2)
+        o3 = self.orientation(p2, q2, p1)
+        o4 = self.orientation(p2, q2, q1)
+
+        # Intersection case
+        if o1 != o2 and o3 != o4:
+            return True
+
+        return False
+
+    def cross_product(self, track_line, ref_line):
+        track_line_vector = np.array(track_line[1]) - np.array(track_line[0])
+        ref_line_vector = np.array(ref_line[1]) - np.array(ref_line[0])
+        cross_product = np.cross(track_line_vector, ref_line_vector)
+        return cross_product
+
     def extract_and_process_tracks(self, tracks):
         cv2.putText(self.im0, f"Entry Count: {self.entry_count}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
         cv2.putText(self.im0, f"Exit Count: {self.exit_count}", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
@@ -241,18 +306,30 @@ class ObjectCounter:
 
                 # Check for all points between start_point and end_point
                 for i in range(len(track_line) - self.backtrack_length, len(track_line)):
-                    if self.counting_region.contains(Point(track_line[i])):                        
-                        direction = self.calculate_direction([start_point, end_point])
-                        if direction > 0 and end_point[1] > self.reg_pts[2][1] and not self.object_info[track_id].entered:
-                            self.object_info[track_id].entered = True
-                            self.entry_count += 1
-                            print("Person entered: ", track_id)
-                            break
-                        elif direction < 0 and end_point[1] < self.reg_pts[0][1] and not self.object_info[track_id].exited:
-                            self.object_info[track_id].exited = True
-                            self.exit_count += 1
-                            print("Person exited: ", track_id)
-                            break
+                    #if self.counting_region.contains(Point(track_line[i])):
+                    entry_line = [self.reg_pts[2], self.reg_pts[3]]
+                    exit_line = [self.reg_pts[1], self.reg_pts[0]]
+                    track_vector = [start_point, end_point]
+
+                    if self.check_intersection(track_vector, entry_line):
+                        if not self.object_info[track_id].entered :
+                            cp = self.cross_product(track_vector, entry_line)
+                            print("Intersection at entry line: ", cp)
+                            if cp > 0 and self.object_info[track_id].entry_started:
+                                self.entry_count += 1
+                                self.object_info[track_id].entered = True
+                            elif cp < 0:
+                                self.object_info[track_id].exit_started = True
+                                
+                    if self.check_intersection(track_vector, exit_line):
+                        if not self.object_info[track_id].exited:
+                            cp = self.cross_product(track_vector, exit_line)
+                            print("Intersection at exit line: ", cp)
+                            if cp < 0 and self.object_info[track_id].exit_started:
+                                self.exit_count += 1
+                                self.object_info[track_id].exited = True
+                            elif cp > 0:
+                                self.object_info[track_id].entry_started = True
 
     def display_frames(self):
         if self.env_check:

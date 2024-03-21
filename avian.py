@@ -23,12 +23,12 @@ class Avian:
         self.format_height = 576 #or h
 
     def fast_forward_callback(self, event, x, y, flags, param):
-        # On right mouse button click, fast forward the video by 1000 frames
+        # On right mouse button click, fast forward the video by 250 frames
         if event == cv2.EVENT_RBUTTONDBLCLK:
-            to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) + 1000 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) + 1000 < self.frame_count else self.frame_count
+            to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) + 250 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) + 250 < self.frame_count else self.frame_count
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, to_count)
         elif event == cv2.EVENT_LBUTTONDBLCLK:
-            to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 1000 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 1000 > 0 else 0
+            to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 > 0 else 0
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, to_count)
 
     def track_and_count(self):
@@ -59,6 +59,8 @@ class Avian:
             for i in range(len(df)):
                 # Store points from columns of pd in reg_pts
                 # FIXME: This is a temporary solution. The points should be stored in a better way.
+                #[(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
+                #[(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
                 reg_pts = [(df["x1"][i], df["y1"][i]), (df["x2"][i], df["y2"][i]), (df["x3"][i], df["y3"][i]), (df["x4"][i], df["y4"][i])]
                 counter_array.append(counter.ObjectCounter())
                 counter_name = "Counter" + str(i)

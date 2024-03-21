@@ -2,6 +2,7 @@ import cv2
 import argparse
 import pandas as pd
 import numpy as np
+import math
 
 # Global variables
 selecting = False
@@ -11,9 +12,12 @@ pt2 = (0, 0)
 img_show = None
 coordinates = []
 selected_index = -1
+rotating = False
+rotation_center = None
+rotation_start_angle = None
 
 def select_region_callback(event, x, y, flags, param):
-    global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index
+    global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index, rotating, rotation_center, rotation_start_angle
     if event == cv2.EVENT_LBUTTONDOWN:
         # Check if clicked near any existing rectangle point
         for i, coord in enumerate(coordinates):
@@ -50,6 +54,24 @@ def select_region_callback(event, x, y, flags, param):
                 moving_points = coordinates[selected_index]
         elif selecting:
             pt2 = (x, y)
+        elif rotating:
+            current_angle = math.atan2(y - rotation_center[1], x - rotation_center[0])
+            rotation_angle = (current_angle - rotation_start_angle) * 0.1  # Adjust the rotation speed
+            rotated_points = rotate_region(coordinates[selected_index], rotation_center, rotation_angle)
+            coordinates[selected_index] = rotated_points
+            rotation_center = calculate_center(rotated_points)  # Update the rotation center
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        # Check if clicked near the center of any existing rectangle
+        for i, coord in enumerate(coordinates):
+            center_x, center_y = calculate_center(coord)
+            if np.hypot(x - center_x, y - center_y) < 10:
+                selected_index = i
+                rotating = True
+                rotation_center = (int(center_x), int(center_y))  # Set the rotation center to the center of the region
+                rotation_start_angle = math.atan2(y - rotation_center[1], x - rotation_center[0])
+                break
+    elif event == cv2.EVENT_RBUTTONUP:
+        rotating = False
     elif event == cv2.EVENT_RBUTTONDBLCLK:
         # Check if clicked near any existing rectangle point
         for i, coord in enumerate(coordinates):
@@ -60,8 +82,21 @@ def select_region_callback(event, x, y, flags, param):
 def draw_point(image, point):
     cv2.circle(image, point, 5, (255, 0, 0), -1)
 
+def rotate_region(points, center, angle):
+    rotation_matrix = cv2.getRotationMatrix2D(center, np.degrees(angle), 1.0)
+    rotated_points = []
+    for point in points:
+        rotated_point = np.dot(rotation_matrix, [point[0], point[1], 1]).astype(int)
+        rotated_points.append(tuple(rotated_point))
+    return rotated_points
+
+def calculate_center(points):
+    center_x = sum(p[0] for p in points) / len(points)
+    center_y = sum(p[1] for p in points) / len(points)
+    return (int(center_x), int(center_y))
+
 def select_region(image_path):
-    global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index
+    global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index, rotating, rotation_center, rotation_start_angle
 
     video_name = get_video_name(image_path)
     # Load the image or video frame
@@ -99,6 +134,11 @@ def select_region(image_path):
             for point in [pt1, (pt2[0], pt1[1]), pt2, (pt1[0], pt2[1])]:
                 draw_point(img_display, point)
         elif moving_points:
+            selected_coord = coordinates[selected_index]
+            cv2.polylines(img_display, [np.array(selected_coord, np.int32)], True, (255, 0, 0), thickness=2)
+            for point in selected_coord:
+                draw_point(img_display, point)
+        elif rotating:
             selected_coord = coordinates[selected_index]
             cv2.polylines(img_display, [np.array(selected_coord, np.int32)], True, (255, 0, 0), thickness=2)
             for point in selected_coord:
