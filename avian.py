@@ -59,8 +59,7 @@ class Avian:
             for i in range(len(df)):
                 # Store points from columns of pd in reg_pts
                 # FIXME: This is a temporary solution. The points should be stored in a better way.
-                #[(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
-                #[(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+
                 reg_pts = [(df["x1"][i], df["y1"][i]), (df["x2"][i], df["y2"][i]), (df["x3"][i], df["y3"][i]), (df["x4"][i], df["y4"][i])]
                 counter_array.append(counter.ObjectCounter())
                 counter_name = "Counter" + str(i)
@@ -75,7 +74,8 @@ class Avian:
                                     buffer_size = self.num_buffer_size,
                                     save_frames = self.num_save_frames,
                                     total_frames = self.frame_count,
-                                    counter_name = counter_name
+                                    counter_name = counter_name,
+                                    region_id = i
                                     )
 
         while self.cap.isOpened():

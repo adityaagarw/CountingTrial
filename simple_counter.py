@@ -75,7 +75,7 @@ class ObjectCounter:
         self.entry_count = 0
         self.exit_count = 0
 
-        self.backtrack_length = 14
+        self.backtrack_length = 10
 
     def set_args(
         self,
@@ -99,7 +99,8 @@ class ObjectCounter:
         buffer_size=10,
         save_frames=0,
         total_frames=0,
-        counter_name="Counter"
+        counter_name="Counter",
+        region_id = 0
     ):
         """
         Configures the Counter's image, bounding box line thickness, and counting region points.
@@ -114,6 +115,7 @@ class ObjectCounter:
         self.track_length = track_length
         self.save_frames = save_frames
         self.counter_name = counter_name
+        self.region_id = region_id
 
         print("--------------------------------------------------------------------")
         print(self.counter_name + " Analysis Initiated.")
@@ -143,6 +145,7 @@ class ObjectCounter:
             self.reg_pts = [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
 
             self.counting_region = Polygon(self.reg_pts)
+
         else:
             x1 = 0
             x2 = self.width
@@ -267,10 +270,13 @@ class ObjectCounter:
         return cross_product
 
     def extract_and_process_tracks(self, tracks):
-        cv2.putText(self.im0, f"Entry Count: {self.entry_count}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
-        cv2.putText(self.im0, f"Exit Count: {self.exit_count}", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
 
-        cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width - 300, self.height - 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
+        cv2.putText(self.im0, f"Entry {self.region_id} Count: {self.entry_count}", (50, 50 + self.region_id * 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
+        cv2.putText(self.im0, f"Exit {self.region_id} Count: {self.exit_count}", (50, 100 + self.region_id * 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
+
+
+        if (self.region_id == 0):
+            cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width - 300, self.height - 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
 
         self.annotator = Annotator(self.im0, self.tf, self.names)
         self.annotator.draw_region(reg_pts=self.reg_pts, color=self.region_color, thickness=self.region_thickness)
@@ -314,8 +320,9 @@ class ObjectCounter:
                     if self.check_intersection(track_vector, entry_line):
                         if not self.object_info[track_id].entered :
                             cp = self.cross_product(track_vector, entry_line)
-                            print("Intersection at entry line: ", cp)
+                            
                             if cp > 0 and self.object_info[track_id].entry_started:
+                                print("Intersection at entry line: ", cp)
                                 self.entry_count += 1
                                 self.object_info[track_id].entered = True
                             elif cp < 0:
@@ -324,8 +331,9 @@ class ObjectCounter:
                     if self.check_intersection(track_vector, exit_line):
                         if not self.object_info[track_id].exited:
                             cp = self.cross_product(track_vector, exit_line)
-                            print("Intersection at exit line: ", cp)
+                            
                             if cp < 0 and self.object_info[track_id].exit_started:
+                                print("Intersection at exit line: ", cp)
                                 self.exit_count += 1
                                 self.object_info[track_id].exited = True
                             elif cp > 0:

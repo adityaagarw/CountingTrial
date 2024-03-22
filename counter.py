@@ -101,7 +101,8 @@ class ObjectCounter:
         buffer_size = 10, # in percent
         save_frames = 0,
         total_frames = 0,
-        counter_name = "Counter"
+        counter_name = "Counter",
+        region_id = 0
     ):
         """
         Configures the Counter's image, bounding box line thickness, and counting region points.
@@ -131,6 +132,7 @@ class ObjectCounter:
         self.track_length = track_length
         self.save_frames = save_frames
         self.counter_name = counter_name
+        self.region_id = region_id
 
         # Region and line selection
         print("--------------------------------------------------------------------")
