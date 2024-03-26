@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.sql import text
 from pgvector.sqlalchemy import Vector
 
 
@@ -106,7 +107,7 @@ class DetectionData(Base):
     # Define the relationships with the FeedMaster, SectionMaster, and GlobalIdMaster tables
     feed = relationship("FeedMaster")
     section = relationship("SectionMaster")
-    global_id = relationship("GlobalIdMaster")
+    globalmaster = relationship("GlobalIdMaster")
 
 
 class PersonMaster(Base):
@@ -133,6 +134,12 @@ class BusinessMaster(Base):
 
 # Create an engine to connect to the PostgreSQL database using Docker
 engine = create_engine('postgresql://avian-admin:avian-password@localhost:5432/avian-db')
+
+with engine.connect() as connection:
+    # Create the database
+    trans = connection.begin() 
+    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+    trans.commit()
 
 # Bind the engine to the base class
 Base.metadata.bind = engine

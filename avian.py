@@ -5,22 +5,27 @@ import cv2
 import numpy as np
 import argparse
 import pandas as pd
+from db.db_queries import DBQueries
 
 class Avian:
-    def __init__(self, video_path):
-        self.video_path = video_path
-        self.model = YOLO("yolov8n.pt")
-        self.cap = cv2.VideoCapture(video_path)
+    def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):
+        self.video_path = feed_url
+        self.model = YOLO(config["model_name"])
+        self.cap = cv2.VideoCapture(feed_url)
         assert self.cap.isOpened(), "Error reading video file"
         self.w, self.h, self.fps = (int(self.cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.classes_to_count = [0]
-        self.video_name = self.get_video_name(self.video_path)
-        self.num_save_frames = 1000
-        self.num_track_length = 100
-        self.num_buffer_size = 0
-        self.format_width = 1024 #or w
-        self.format_height = 576 #or h
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) #FIXME: Check if this is valid for streaming
+        self.classes_to_count = config["classes_to_count"]
+        self.num_save_frames = config["save_frames"]
+        self.num_track_length = config["track_length"]
+        self.num_buffer_size = config["buffer_size"]
+        self.format_width = config["target_width"] #or w
+        self.format_height = config["target_height"] #or h
+        self.sections = section_obj
+        self.track_confidence= config["track_confidence"]
+        self.feed_id = feed_id
+        self.camera_id = camera_id
+        self.query_obj = query
 
     def fast_forward_callback(self, event, x, y, flags, param):
         # On right mouse button click, fast forward the video by 250 frames
@@ -31,52 +36,29 @@ class Avian:
             to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 > 0 else 0
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, to_count)
 
-    def track_and_count(self):
-
-        counter_array = []    
-        # Read excel file "video_name.xlsx" and create array of counters based on number of rows in the file
-        df = pd.read_excel(self.video_name + ".xlsx")
-        if df is None or df.empty:
-            print("The excel file is empty or does not exist.")
-            reg_pts=None
-            counter_array.append(counter.ObjectCounter())
-            counter_name = "Counter"
-            counter_array[0].set_args(view_img=True,
-                                reg_pts=reg_pts,
+    def run_tracker(self):
+        ee_counter_array = []
+        for section in self.sections:
+            if section.section_type == "entry_exit": #FIXME: Change to feature_id in future
+                ee_counter = counter.ObjectCounter(self.feed_id)
+                ee_counter_array.append(ee_counter)
+                ee_counter.set_args(view_img=True,
+                                reg_pts=eval(section.coordinates),
                                 classes_names=self.model.names,
                                 draw_tracks=True,
-                                width = self.format_w,
-                                height = self.format_h,
+                                width = self.format_width,
+                                height = self.format_height,
                                 fps = self.fps,
                                 track_length = self.num_track_length,
                                 buffer_size = self.num_buffer_size,
                                 save_frames = self.num_save_frames,
                                 total_frames = self.frame_count,
-                                counter_name = counter_name
+                                counter_name = "Counter " + str(section.id),
+                                region_id = section.id,
+                                camera_id = self.camera_id,
+                                feed_id = self.feed_id,
+                                query_obj = self.query_obj
                                 )
-        
-        else:
-            for i in range(len(df)):
-                # Store points from columns of pd in reg_pts
-                # FIXME: This is a temporary solution. The points should be stored in a better way.
-
-                reg_pts = [(df["x1"][i], df["y1"][i]), (df["x2"][i], df["y2"][i]), (df["x3"][i], df["y3"][i]), (df["x4"][i], df["y4"][i])]
-                counter_array.append(counter.ObjectCounter())
-                counter_name = "Counter" + str(i)
-                counter_array[i].set_args(view_img=True,
-                                    reg_pts=reg_pts,
-                                    classes_names=self.model.names,
-                                    draw_tracks=True,
-                                    width = self.format_width,
-                                    height = self.format_height,
-                                    fps = self.fps,
-                                    track_length = self.num_track_length,
-                                    buffer_size = self.num_buffer_size,
-                                    save_frames = self.num_save_frames,
-                                    total_frames = self.frame_count,
-                                    counter_name = counter_name,
-                                    region_id = i
-                                    )
 
         while self.cap.isOpened():
             success, im0 = self.cap.read()
@@ -87,29 +69,57 @@ class Avian:
                 print("Video frame is empty or video processing has been successfully completed.")
                 break
             tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
-                                classes=self.classes_to_count, conf=0.15)
+                                classes=self.classes_to_count, conf=self.track_confidence)
 
-            for i in range(len(counter_array)): 
-                im0 = counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-                cv2.setMouseCallback("Avian Tech", self.fast_forward_callback)
+            for i in range(len(ee_counter_array)): 
+                im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
 
         self.cap.release()
         cv2.destroyAllWindows()
-    
-    def get_video_name(self, video_path):
-        # Split the video path to get the video name
-        video_name = video_path.split("/")[-1]
-        # Split the video name to get the video name without the extension
-        video_name_without_extension = video_name.split(".")[0]
-        # Return the video name and the video name without the extension
-        return video_name_without_extension
 
+def start_message():
+    # Display ascii art
+    print("         .  ....         ...     ..            .       ..            ..")
+    print("        ...   ..          ..     ..           ...       .. .         ..")
+    print("       .. .    ..        ..      ..          .. .      ..  ..        ..")
+    print("      ..  .    ..        ..      ..         ..  .      ..   ..       ..")
+    print("     ..   .     ..      ..       ..        ..   .      ..   ..      ..")  
+    print("    ... ...      ..     ..      ..        ... ...     ..     ..     ..")
+    print("   ... ....      ..    ..       ..       ... ....     ..      ..   ..")
+    print("  ...     .       ..  ..       ..       ...     .    ..        ..  ..")
+    print(" ....     ..       .. ..       ..      ....     ..   ..         .. ..")
+    print(".....     ..       ....       ..      .....     ..  ..           ...")
+    print("                     ADVANCED VISION ANALYTICS                      ")
 if __name__ == "__main__":
+    print("Welcome to ...")
+    start_message()
     # Parse arguments using arparge for video path
     parser = argparse.ArgumentParser(description="Counting the number of objects in a video")
-    parser.add_argument("video_path", type=str, help="Path to the stream/video")
+    parser.add_argument("feed_id", type=str, help="Feed id")
     args = parser.parse_args()
+    print("Starting feed ",args.feed_id,"...")
+    
+    query = DBQueries()
+    
+    section_obj = query.get_sections(args.feed_id) 
+    feed_url = query.get_feed_url(args.feed_id)
+    config = query.get_feed_config(args.feed_id)
+    camera_id = query.get_feed_camera_id(args.feed_id)
+    
+    # Add Nonechecks for the objects
+    if section_obj is None:
+        print("No sections found for feed id ", args.feed_id)
+        exit(0)
+    
+    if feed_url is None:
+        print("No feed url found for feed id ", args.feed_id)
+        exit(0)
+        
+    if config is None:
+        print("No config found for feed id ", args.feed_id)
 
-    avian = Avian(args.video_path)
+    #FIXME: Decide if multiple processes to be spawned for one multiple sections in a feed
+    avian = Avian(section_obj, feed_url, config, args.feed_id, camera_id, query)
     # Call a new function for counting the objects in the video
-    avian.track_and_count()
+    avian.run_tracker()

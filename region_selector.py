@@ -3,6 +3,8 @@ import argparse
 import pandas as pd
 import numpy as np
 import math
+from db.db_queries import DBQueries
+from db.schema import SectionMaster
 
 # Global variables
 selecting = False
@@ -15,6 +17,8 @@ selected_index = -1
 rotating = False
 rotation_center = None
 rotation_start_angle = None
+
+text_to_display = {'entry': [(2, 3), 'Entry'], 'exit': [(0, 1), 'Exit']}
 
 def select_region_callback(event, x, y, flags, param):
     global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index, rotating, rotation_center, rotation_start_angle
@@ -80,7 +84,13 @@ def select_region_callback(event, x, y, flags, param):
                 break
 
 def draw_point(image, point):
+    global text_to_display, selected_index, index, coordinates
     cv2.circle(image, point, 5, (255, 0, 0), -1)
+    for i, coord in enumerate(coordinates):
+        for key, value in text_to_display.items():
+            for index in value[0]:
+                if index < len(coord) and point == coord[index]:
+                    cv2.putText(image, value[1], (point[0]+10, point[1]+10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
 def rotate_region(points, center, angle):
     rotation_matrix = cv2.getRotationMatrix2D(center, np.degrees(angle), 1.0)
@@ -95,7 +105,7 @@ def calculate_center(points):
     center_y = sum(p[1] for p in points) / len(points)
     return (int(center_x), int(center_y))
 
-def select_region(image_path):
+def select_region(image_path, feed_id, camera_id, db_queries):
     global selecting, moving_points, pt1, pt2, img_show, coordinates, selected_index, rotating, rotation_center, rotation_start_angle
 
     video_name = get_video_name(image_path)
@@ -150,6 +160,12 @@ def select_region(image_path):
         key = cv2.waitKey(1) & 0xFF
         if key == ord('r'):
             excel_file = video_name + ".xlsx"
+            print("DEBUG first set of coordinates: ", str(coordinates[0]))
+            i = 1
+            for coord in coordinates:
+                db_queries.add_section(camera_id, feed_id, coord, "entry_exit_" + str(i), "entry_exit", "")
+                i += 1
+ 
             df = pd.DataFrame([np.array(coord).reshape(-1) for coord in coordinates], columns=['x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4'])
             df.to_excel(excel_file, index=False)
             print("Selected regions saved to '" + excel_file + "'")
@@ -171,6 +187,14 @@ def get_video_name(video_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Select regions on an image or video')
-    parser.add_argument('path', type=str, help='Path to the image or video')
+    parser.add_argument('feed_id', type=str, help='Feed id')
+    #parser.add_argument('path', type=str, help='Path to the image or video')
     args = parser.parse_args()
-    select_region(args.path)
+    feed_id = args.feed_id
+    
+    # Fetch the feed url from the database
+    db_queries = DBQueries()
+    feed_url = db_queries.get_feed_url(feed_id)
+    camera_id = db_queries.get_feed_camera_id(feed_id)
+
+    select_region(feed_url, feed_id, camera_id, db_queries)

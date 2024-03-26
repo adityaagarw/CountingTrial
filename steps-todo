@@ -1,0 +1,10 @@
+#STEPS
+
+--DOCKER
+   docker build -t avian-pgsql .
+   docker run -d --name avian-pgsql -p 5432:5432 avian-pgsql
+   sleep(60)
+
+
+#TODO
+   

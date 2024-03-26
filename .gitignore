@@ -4,3 +4,4 @@ yolov8n.pt
 yolov8x.pt
 *.pt
 *.xlsx
+__pycache__/

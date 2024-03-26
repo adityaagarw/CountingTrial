@@ -1,13 +1,13 @@
 from collections import defaultdict
 
 import cv2
-import time
-import math
 from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
 import pandas as pd
 import numpy as np
-from pandas import ExcelWriter
+from db.db_service import DBService
+from utils.vector_utils import VectorUtils
+from datetime import datetime
 
 ENTRY_THRESHOLD = 1
 EXIT_THRESHOLD = 5
@@ -32,9 +32,10 @@ class ObjectInfo:
 class ObjectCounter:
     """A class to manage the counting of objects in a real-time video stream based on their tracks."""
 
-    def __init__(self):
+    def __init__(self, feed_id):
         """Initializes the Counter with default values for various tracking and counting parameters."""
 
+        self.feed_id = feed_id
         self.entry_time = {}
         self.is_drawing = False
         self.selected_point = None
@@ -100,7 +101,10 @@ class ObjectCounter:
         save_frames=0,
         total_frames=0,
         counter_name="Counter",
-        region_id = 0
+        region_id = 0,
+        camera_id = 1,
+        feed_id = 1,
+        query_obj = None
     ):
         """
         Configures the Counter's image, bounding box line thickness, and counting region points.
@@ -116,6 +120,9 @@ class ObjectCounter:
         self.save_frames = save_frames
         self.counter_name = counter_name
         self.region_id = region_id
+        self.camera_id = camera_id
+        self.feed_id = feed_id
+        self.query_obj = query_obj
 
         print("--------------------------------------------------------------------")
         print(self.counter_name + " Analysis Initiated.")
@@ -138,10 +145,6 @@ class ObjectCounter:
             y3 = reg_pts[2][1]
             y4 = reg_pts[3][1]
 
-            # new_x1 = x1 + ((x2 - x1) * buffer_size / 100)
-            # new_y1 = y1 + ((y2 - y1) * buffer_size / 100)
-            # new_x2 = x2 - ((x2 - x1) * buffer_size / 100)
-            # new_y2 = y2 - ((y2 - y1) * buffer_size / 100)
             self.reg_pts = [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
 
             self.counting_region = Polygon(self.reg_pts)
@@ -169,119 +172,16 @@ class ObjectCounter:
         self.region_thickness = region_thickness
         self.line_dist_thresh = line_dist_thresh
 
-    def save_object_info(self):
-        if self.frame_count >= self.save_frames and self.frame_count // self.save_frames > self.last_saved_frame // self.save_frames:
-            print("Saving object info to excel")
-            df = pd.DataFrame(columns=['ID', 'Entry Frame', 'Frame Count', 'Exit Frame', 'Tracking History', 'Dwell Time', 'Entered', 'Exited'])
-            for track_id in self.object_info:
-                new_row = {
-                    'ID': track_id,
-                    'Entry Frame': self.object_info[track_id].entry_frame,
-                    'Frame Count': self.object_info[track_id].frame_count,
-                    'Exit Frame': self.object_info[track_id].exit_frame,
-                    'Tracking History': self.object_info[track_id].track_history,
-                    'Dwell Time': self.object_info[track_id].dwell_time,
-                    'Entered': self.object_info[track_id].entered,
-                    'Exited': self.object_info[track_id].exited
-                }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-
-            self.last_saved_frame = self.frame_count
-            self.excel_created = True
-            df1 = df.groupby(['Entered', 'Exited'])['Entered'].count()
-            df1 = df1.unstack(fill_value=0)
-            df1 = df1.reset_index()
-            df = pd.concat([df, df1], axis=1)
-            if (self.frame_count // self.save_frames) == 1:
-                mode = 'w'
-            else:
-                mode = 'a'
-
-            excel_file = self.counter_name + ".xlsx"
-            with pd.ExcelWriter(excel_file, engine='openpyxl', mode=mode) as writer:
-                df.to_excel(writer, sheet_name=f'sheet_{self.frame_count // self.save_frames}', index=False)
-                print("Count: ", self.frame_count // self.save_frames, " Excel saved")
-
-    def calculate_direction(self, track_line):
-        if len(track_line) < 2:
-            return 0
-
-        start_point = track_line[0]
-        end_point = track_line[-1]
-
-        direction = end_point[1] - start_point[1]
-        return direction
-
-    def calculate_angle(self, line1, line2):
-        x1, y1 = line1[0]
-        x2, y2 = line1[1]
-        x3, y3 = line2[0]
-        x4, y4 = line2[1]
-
-        vector1 = (x2 - x1, y2 - y1)
-        vector2 = (x4 - x3, y4 - y3)
-
-        dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
-        magnitude1 = math.sqrt(vector1[0] ** 2 + vector1[1] ** 2)
-        magnitude2 = math.sqrt(vector2[0] ** 2 + vector2[1] ** 2)
-
-        if magnitude1 == 0 or magnitude2 == 0:
-            return 0
-
-        angle = math.acos(dot_product / (magnitude1 * magnitude2))
-        angle_degrees = math.degrees(angle)
-
-        return angle_degrees
-
-    def orientation(self, p1, p2, p3):
-        val = (p2[1] - p1[1]) * (p3[0] - p2[0]) - (p2[0] - p1[0]) * (p3[1] - p2[1])
-        if val == 0:
-            return 0  # collinear
-        elif val > 0:
-            return 1  # clockwise
-        else:
-            return 2  # counterclockwise
-
-    def check_intersection(self, line1, line2):
-        p1 = line1[0]
-        q1 = line1[1]
-        p2 = line2[0]
-        q2 = line2[1]
-        """
-        Returns True if line segments 'p1q1' and 'p2q2' intersect.
-        """
-        # Find the four orientations needed for the general and
-        # special cases
-        o1 = self.orientation(p1, q1, p2)
-        o2 = self.orientation(p1, q1, q2)
-        o3 = self.orientation(p2, q2, p1)
-        o4 = self.orientation(p2, q2, q1)
-
-        # Intersection case
-        if o1 != o2 and o3 != o4:
-            return True
-
-        return False
-
-    def cross_product(self, track_line, ref_line):
-        track_line_vector = np.array(track_line[1]) - np.array(track_line[0])
-        ref_line_vector = np.array(ref_line[1]) - np.array(ref_line[0])
-        cross_product = np.cross(track_line_vector, ref_line_vector)
-        return cross_product
-
     def extract_and_process_tracks(self, tracks):
 
         cv2.putText(self.im0, f"Entry {self.region_id} Count: {self.entry_count}", (50, 50 + self.region_id * 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
         cv2.putText(self.im0, f"Exit {self.region_id} Count: {self.exit_count}", (50, 100 + self.region_id * 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
 
-
-        if (self.region_id == 0):
+        if (self.region_id == 1):
             cv2.putText(self.im0, f"Frame: {self.frame_count}", (self.width - 300, self.height - 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (36, 255, 12), 2)
 
         self.annotator = Annotator(self.im0, self.tf, self.names)
         self.annotator.draw_region(reg_pts=self.reg_pts, color=self.region_color, thickness=self.region_thickness)
-
-        self.save_object_info()
 
         if tracks[0].boxes.id is None:
             return
@@ -317,37 +217,42 @@ class ObjectCounter:
                     exit_line = [self.reg_pts[1], self.reg_pts[0]]
                     track_vector = [start_point, end_point]
 
-                    if self.check_intersection(track_vector, entry_line):
+                    if VectorUtils.check_intersection(track_vector, entry_line):
                         if not self.object_info[track_id].entered :
-                            cp = self.cross_product(track_vector, entry_line)
+                            cp = VectorUtils.cross_product(track_vector, entry_line)
                             
                             if cp > 0 and self.object_info[track_id].entry_started:
-                                print("Intersection at entry line: ", cp)
                                 self.entry_count += 1
                                 self.object_info[track_id].entered = True
+                                curr_time = datetime.now()
+                                global_id = self.query_obj.new_global_id(self.camera_id, self.feed_id, self.region_id, self.frame_count, curr_time, curr_time)
+                                self.query_obj.record_entry_exit(self.feed_id, self.region_id, global_id, curr_time, "entry", curr_time, self.frame_count)
                             elif cp < 0:
                                 self.object_info[track_id].exit_started = True
                                 
-                    if self.check_intersection(track_vector, exit_line):
+                    if VectorUtils.check_intersection(track_vector, exit_line):
                         if not self.object_info[track_id].exited:
-                            cp = self.cross_product(track_vector, exit_line)
+                            cp = VectorUtils.cross_product(track_vector, exit_line)
                             
                             if cp < 0 and self.object_info[track_id].exit_started:
-                                print("Intersection at exit line: ", cp)
                                 self.exit_count += 1
                                 self.object_info[track_id].exited = True
+                                curr_time = datetime.now()
+                                global_id = self.query_obj.new_global_id(self.camera_id, self.feed_id, self.region_id, self.frame_count, curr_time, curr_time)
+                                self.query_obj.record_entry_exit(self.feed_id, self.region_id, global_id, curr_time, "exit", curr_time, self.frame_count)
                             elif cp > 0:
                                 self.object_info[track_id].entry_started = True
 
     def display_frames(self):
         if self.env_check:
-            cv2.namedWindow("Avian Tech")
-            cv2.imshow("Avian Tech", self.im0)
+            cv2.namedWindow("Avian Tech " + str(self.feed_id))
+            cv2.imshow("Avian Tech " + str(self.feed_id), self.im0)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 return
 
     def start_counting(self, im0, tracks, fc):
         self.im0 = im0
+        #FIXME: Change the way the frame count is handled for streams and videos
         self.frame_count = fc
 
         self.extract_and_process_tracks(tracks)
