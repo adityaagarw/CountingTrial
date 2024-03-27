@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import argparse
 import pandas as pd
-from db.db_queries import DBQueries
+from backend.db.db_queries import DBQueries
 
 class Avian:
     def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):

@@ -5,7 +5,7 @@ from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
 import pandas as pd
 import numpy as np
-from db.db_service import DBService
+from backend.db.db_service import DBService
 from utils.vector_utils import VectorUtils
 from datetime import datetime
 

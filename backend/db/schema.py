@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, ForeignKey, Date
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -131,6 +131,14 @@ class BusinessMaster(Base):
     expiry_date = Column(Date)
     license_status = Column(String)
     deployment_type = Column(String)
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_admin = Column(Boolean, default=False)
 
 # Create an engine to connect to the PostgreSQL database using Docker
 engine = create_engine('postgresql://avian-admin:avian-password@localhost:5432/avian-db')

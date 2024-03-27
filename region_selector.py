@@ -3,8 +3,8 @@ import argparse
 import pandas as pd
 import numpy as np
 import math
-from db.db_queries import DBQueries
-from db.schema import SectionMaster
+from backend.db.db_queries import DBQueries
+from backend.db.schema import SectionMaster
 
 # Global variables
 selecting = False
