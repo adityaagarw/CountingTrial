@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 from .authentication import router as auth_router
+from .camera import router as camera_router
+from .feed import router as feed_router
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -14,3 +16,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(camera_router)
+app.include_router(feed_router)

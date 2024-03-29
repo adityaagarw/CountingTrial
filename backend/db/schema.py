@@ -140,6 +140,13 @@ class User(Base):
     hashed_password = Column(String)
     is_admin = Column(Boolean, default=False)
 
+class PIDMaster(Base):
+    __tablename__ = 'pid_master'
+
+    id = Column(Integer, primary_key=True)
+    feed_id = Column(Integer)
+    pid = Column(Integer)
+
 # Create an engine to connect to the PostgreSQL database using Docker
 engine = create_engine('postgresql://avian-admin:avian-password@localhost:5432/avian-db')
 

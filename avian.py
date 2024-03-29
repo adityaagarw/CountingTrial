@@ -15,14 +15,15 @@ class Avian:
         assert self.cap.isOpened(), "Error reading video file"
         self.w, self.h, self.fps = (int(self.cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) #FIXME: Check if this is valid for streaming
+        print("CLASSES: ", config["classes_to_count"])
         self.classes_to_count = config["classes_to_count"]
-        self.num_save_frames = config["save_frames"]
-        self.num_track_length = config["track_length"]
-        self.num_buffer_size = config["buffer_size"]
-        self.format_width = config["target_width"] #or w
-        self.format_height = config["target_height"] #or h
+        self.num_save_frames = int(config["save_frames"])
+        self.num_track_length = int(config["track_length"])
+        self.num_buffer_size = int(config["buffer_size"])
+        self.format_width = int(config["target_width"]) #or w
+        self.format_height = int(config["target_height"]) #or h
         self.sections = section_obj
-        self.track_confidence= config["track_confidence"]
+        self.track_confidence= float(config["track_confidence"])
         self.feed_id = feed_id
         self.camera_id = camera_id
         self.query_obj = query
