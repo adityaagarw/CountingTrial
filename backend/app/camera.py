@@ -21,7 +21,7 @@ class CameraInDB(BaseModel):
     makeModel: str
 
 # Add a new route to add a camera
-@router.post("/addCamera")
+@router.post("/add-camera")
 def addCamera(form_data: CameraInDB):
     db = DBService().get_session()
 
@@ -48,21 +48,21 @@ def addCamera(form_data: CameraInDB):
     return {"message": "Camera added successfully"}
 
 # Fetch all cameras
-@router.get("/getCameras")
+@router.get("/get-cameras")
 def getCamera():
     db = DBService().get_session()
     cameras = db.query(CameraMaster).all()
     return cameras
 
 # Fetch all camera IDs
-@router.get("/getCameraIds")
+@router.get("/get-camera-ids")
 def getCameraIds():
     db = DBService().get_session()
     camera_ids = db.query(CameraMaster.id).all()
     camera_ids = [id[0] for id in camera_ids]
     return camera_ids
 
-@router.delete("/deleteCamera/{camera_id}")
+@router.delete("/delete-camera/{camera_id}")
 def deleteCamera(camera_id: int):
     db = DBService().get_session()
     camera = db.query(CameraMaster).filter(CameraMaster.id == camera_id).first()
