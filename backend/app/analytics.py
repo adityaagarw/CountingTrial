@@ -19,7 +19,7 @@ class QueryParameters(BaseModel):
 
 
 
-@router.post("/all_feed_data")
+@router.post("/feed-attribute-count")
 def get_all_feed_data(parameters: QueryParameters):
     where_clause = {}
 

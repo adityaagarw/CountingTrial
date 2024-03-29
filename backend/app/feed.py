@@ -5,12 +5,14 @@ from db.db_service import DBService
 from pydantic import BaseModel
 from datetime import datetime
 import subprocess
+from pydantic import Field
+from fastapi.responses import StreamingResponse
 
 router = APIRouter()
 
 class FeedInDB(BaseModel):
-    cameraId: str
-    name: str
+    cameraId: str 
+    name: str 
     location: str
     areaCovered: str
     url: str
@@ -19,7 +21,7 @@ class FeedInDB(BaseModel):
     config: str
 
 # Add a new route to add a camera
-@router.post("/addFeed")
+@router.post("/add-feed")
 def addFeed(form_data: FeedInDB):
     print(form_data)
     db = DBService().get_session()
@@ -44,14 +46,14 @@ def addFeed(form_data: FeedInDB):
     return {"message": "Feed added successfully"}
 
 # Fetch all feeds
-@router.get("/getFeeds")
+@router.get("/get-feeds")
 def getFeeds():
     db = DBService().get_session()
     feeds = db.query(FeedMaster).all()
     return feeds
 
 # Fetch all feed IDs
-@router.get("/getFeedIds")
+@router.get("/get-feed-ids")
 def getFeedIds():
     db = DBService().get_session()
     feed_ids = db.query(FeedMaster.id).all()
@@ -59,7 +61,7 @@ def getFeedIds():
     return feed_ids
 
 # Delete specific feed
-@router.delete("/deleteFeed/{feed_id}")
+@router.delete("/delete-feed/{feed_id}")
 def deleteFeed(feed_id: int):
     db = DBService().get_session()
     feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
@@ -71,7 +73,7 @@ def deleteFeed(feed_id: int):
 
 # Start feed
 #FIXME: Should run in conda environment
-@router.post("/startFeed/{feed_id}")
+@router.post("/start-feed/{feed_id}")
 def startFeed(feed_id: int):
     # Start the avian python program with the feed_id
     proc = subprocess.Popen(['python', '../avian.py', str(feed_id)])#, shell=True)
@@ -90,7 +92,7 @@ def startFeed(feed_id: int):
     return {"message": "Feed started successfully"}
 
 # Stop feed
-@router.post("/stopFeed/{feed_id}")
+@router.post("/stop-feed/{feed_id}")
 def stopFeed(feed_id: int):
     # Kill the avian python program with the feed_id
     # Fetch pid from db
@@ -106,3 +108,25 @@ def stopFeed(feed_id: int):
     db.delete(feed)
     db.commit()
     return {"message": "Feed stopped successfully"}
+
+@router.get('/view-feed/{feed_id}')
+async def view_feed(feed_id: int):
+    # with open('my_named_pipe', mode='rb') as pipe:
+    #     frame_bytes = pipe.read()
+
+    #     return StreamingResponse(content=frame_bytes, media_type="image/jpeg")
+    def generate():
+        with open('my_named_pipe', "rb") as pipe:
+            while True:
+                frame_bytes = pipe.read()  # Read a chunk of data
+                if not frame_bytes:
+                    break  # End of file reached
+
+                # Yield the image bytes
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+                )
+    #             yield frame_bytes
+
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
