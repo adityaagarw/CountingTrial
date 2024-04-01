@@ -3,8 +3,6 @@ from fastapi import FastAPI, WebSocket
 import psycopg2
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-import databases
-import sqlalchemy
 import asyncio
 from sqlalchemy.orm import sessionmaker
 from db.db_service import DBService

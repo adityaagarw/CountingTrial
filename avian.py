@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import argparse
 import pandas as pd
+import json
 from backend.db.db_queries import DBQueries
 
 class Avian:
@@ -15,8 +16,7 @@ class Avian:
         assert self.cap.isOpened(), "Error reading video file"
         self.w, self.h, self.fps = (int(self.cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) #FIXME: Check if this is valid for streaming
-        print("CLASSES: ", config["classes_to_count"])
-        self.classes_to_count = config["classes_to_count"]
+        self.classes_to_count = json.loads(config["classes_to_count"]) if config["classes_to_count"] is not None else [0]
         self.num_save_frames = int(config["save_frames"])
         self.num_track_length = int(config["track_length"])
         self.num_buffer_size = int(config["buffer_size"])

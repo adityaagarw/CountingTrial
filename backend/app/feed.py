@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from db.schema import FeedMaster, PIDMaster
+from db.schema import FeedMaster, PIDMaster, SectionMaster
 from db.db_service import DBService
 from pydantic import BaseModel
 from datetime import datetime
 import subprocess
+import cv2
+import io
 from pydantic import Field
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+import json
 
 router = APIRouter()
 
@@ -39,7 +42,7 @@ def addFeed(form_data: FeedInDB):
         modified_at = datetime.now(),
         config = form_data.config
     )
-        
+
     db.add(feed)
     db.commit()
     # Return success message
@@ -70,6 +73,37 @@ def deleteFeed(feed_id: int):
     db.delete(feed)
     db.commit()
     return {"message": "Feed deleted successfully"}
+
+# Get feed config
+@router.get("/feed-target-resolution/{feed_id}")
+def feedTargetResolution(feed_id: int):
+    db = DBService().get_session()
+    feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
+    if feed is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    config = eval(feed.config)
+    target_height = int(config['target_height'])
+    target_width = int(config['target_width'])
+    return {"target_height": target_height, "target_width": target_width}
+
+# Get feed image
+@router.get("/feed-image/{feed_id}")
+def feedImage(feed_id: int):
+    db = DBService().get_session()
+    feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
+    if feed is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    
+    # Get image from feed
+    config = eval(feed.config)
+    target_height = int(config['target_height'])
+    target_width = int(config['target_width'])
+    cap = cv2.VideoCapture(feed.url)
+    ret, frame = cap.read()
+    #Encode image
+    frame= cv2.resize(frame, (target_width, target_height))
+    _, img_encoded = cv2.imencode('.jpg', frame)
+    return Response(img_encoded.tobytes(), media_type="image/jpeg")
 
 # Start feed
 #FIXME: Should run in conda environment
@@ -109,6 +143,55 @@ def stopFeed(feed_id: int):
     db.commit()
     return {"message": "Feed stopped successfully"}
 
+def save_section(db: Session, section: SectionMaster):
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+    return section.id
+
+# Save regions
+@router.post("/save-regions/{feed_id}")
+async def saveRegions(feed_id: int, request: Request):
+    data = await request.json()
+    # Parse regions from json to {(x1, y1), (x2, y2), (x3, y3), (x4, y4)} format
+    regions = data.get('regions', [])
+
+    for region in regions:
+        parsed_region = [
+        (region['topLeft']['x'], region['topLeft']['y']),
+        (region['topRight']['x'], region['topRight']['y']),
+        (region['bottomRight']['x'], region['bottomRight']['y']),
+        (region['bottomLeft']['x'], region['bottomLeft']['y'])
+        ]
+        # Save regions in db
+        db = DBService().get_session()
+        # Get feed_master details
+        feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
+        if feed is None:
+            raise HTTPException(status_code=404, detail="Feed not found")
+        
+        # Get camera_id from feed_master
+        camera_id = feed.camera_id
+        # Save section_master
+        coordinates = str(parsed_region)
+        section = SectionMaster(
+            camera_id=camera_id,
+            feed_id=feed_id,
+            coordinates=coordinates,
+            section_type="entry_exit",
+            extras=""
+        )
+        section_id = save_section(db, section)
+        section.section_name = f"entry_exit_{section_id}"
+        db.commit()
+        # Append section_id to feed_master
+        sections = json.loads(feed.sections)
+        sections.append(section_id)
+        
+        feed.sections = json.dumps(sections)
+        db.commit()
+    return {"message": "Regions saved successfully"}
+    
 @router.get('/view-feed/{feed_id}')
 async def view_feed(feed_id: int):
     # with open('my_named_pipe', mode='rb') as pipe:

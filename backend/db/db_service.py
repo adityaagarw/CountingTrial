@@ -17,6 +17,9 @@ class DBService:
 
     def get_session(self):
         return self.Session()
+    
+    def get_engine(self):
+        return self.engine
 
     def dispatch(self, model, action, *args, **kwargs):
         session = self.get_session()
