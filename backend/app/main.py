@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from .authentication import router as auth_router
 from .camera import router as camera_router
-from .sql_websocket import router as data_router
+from .sql_websocket import router as websocket_router
 from .feed import router as feed_router
 from .analytics import router as detection_data_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +25,6 @@ app.add_middleware(
 )
 app.include_router(auth_router, prefix="/auth", tags=["User Auth"])
 app.include_router(camera_router, prefix="/camera", tags=["Camera"])
-app.include_router(data_router, prefix="/data", tags=["Data"])
 app.include_router(detection_data_router, prefix="/stats", tags=["Statistics"])
 app.include_router(feed_router, prefix="/feed", tags=["Feed"])
+app.include_router(websocket_router, prefix="", tags=["WS"])

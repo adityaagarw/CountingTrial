@@ -6,7 +6,10 @@ from pydantic import BaseModel
 from datetime import datetime
 import subprocess
 import cv2
-import io
+import os
+import numpy as np
+import struct
+import errno
 from pydantic import Field
 from fastapi.responses import StreamingResponse, Response
 import json
@@ -110,7 +113,7 @@ def feedImage(feed_id: int):
 @router.post("/start-feed/{feed_id}")
 def startFeed(feed_id: int):
     # Start the avian python program with the feed_id
-    proc = subprocess.Popen(['python', '../avian.py', str(feed_id)])#, shell=True)
+    proc = subprocess.Popen(['python', 'avian.py', str(feed_id)])#, shell=True)
     # Store pid in db
     db = DBService().get_session()
     feed = db.query(PIDMaster).filter(PIDMaster.feed_id == feed_id).first()
@@ -131,13 +134,14 @@ def stopFeed(feed_id: int):
     # Kill the avian python program with the feed_id
     # Fetch pid from db
     db = DBService().get_session()
-    feed = db.query(PIDMaster).filter(FeedMaster.id == feed_id).first()
+    print("Killing feed " + str(feed_id))
+    feed = db.query(PIDMaster).filter(PIDMaster.feed_id == feed_id).first()
     if feed is None:
         raise HTTPException(status_code=404, detail="Feed not found")
     # On linux, use the following command
-    # subprocess.Popen(['kill', '-9', feed.pid])
+    subprocess.Popen(['kill', '-9', str(feed.pid)])
     # On windows, use the following command
-    subprocess.Popen(['taskkill', '/F', '/T', '/PID', str(feed.pid)])
+    #subprocess.Popen(['taskkill', '/F', '/T', '/PID', str(feed.pid)])
     # Delete pid from db
     db.delete(feed)
     db.commit()
@@ -185,7 +189,7 @@ async def saveRegions(feed_id: int, request: Request):
         section.section_name = f"entry_exit_{section_id}"
         db.commit()
         # Append section_id to feed_master
-        sections = json.loads(feed.sections)
+        sections = json.loads(feed.sections) if feed.sections is not None else []
         sections.append(section_id)
         
         feed.sections = json.dumps(sections)
@@ -194,22 +198,35 @@ async def saveRegions(feed_id: int, request: Request):
     
 @router.get('/view-feed/{feed_id}')
 async def view_feed(feed_id: int):
-    # with open('my_named_pipe', mode='rb') as pipe:
-    #     frame_bytes = pipe.read()
 
-    #     return StreamingResponse(content=frame_bytes, media_type="image/jpeg")
+    pipe_name = "/tmp/avian_pipe_" + str(feed_id)
+    pipe_fd = os.open(pipe_name, os.O_RDONLY)# | os.O_NONBLOCK)
     def generate():
-        with open('my_named_pipe', "rb") as pipe:
-            while True:
-                frame_bytes = pipe.read()  # Read a chunk of data
+        while True:
+            try:
+                dimensions = os.read(pipe_fd, 3 *4)
+                width, height, size = np.frombuffer(dimensions, dtype=np.int32)
+                #struct.unpack('iii', dimensions)
+                frame_size = width * height * size
+                frame_bytes = os.read(pipe_fd, frame_size)
                 if not frame_bytes:
+                    print("No frame bytes")
                     break  # End of file reached
-
-                # Yield the image bytes
+                
+                frame = np.frombuffer(frame_bytes, dtype=np.uint8)
+                frame = frame.reshape((height, width, size))
+                
+                # Convert frame to jpeg
+                _, img_encoded = cv2.imencode('.jpg', frame)
+                frame_bytes_display = img_encoded.tobytes()
                 yield (
                     b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes_display + b'\r\n'
                 )
-    #             yield frame_bytes
+            except Exception as e:
+                if e.errno == errno.EAGAIN or e.errno == errno.EWOULDBLOCK:
+                    print('No data available to read.')
+                else:
+                    print(e)
 
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")

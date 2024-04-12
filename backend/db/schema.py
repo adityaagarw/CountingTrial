@@ -148,7 +148,7 @@ class PIDMaster(Base):
     pid = Column(Integer)
 
 # Create an engine to connect to the PostgreSQL database using Docker
-engine = create_engine('postgresql://avian-admin:avian-password@localhost:5432/avian-db')
+engine = create_engine('postgresql://avian-admin:avian-password@avian_db:5432/avian-db')
 
 with engine.connect() as connection:
     # Create the database

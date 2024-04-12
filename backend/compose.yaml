@@ -1,0 +1,30 @@
+version: '1'
+services:
+  avian_db:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    image: avian-db
+    ports:
+      - "5432:5432"
+  avian_backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: avian-backend
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - avian_db
+    environment:
+      - DISPLAY=host.docker.internal:0
+    stdin_open: true
+    tty: true
+#  avian_frontend:
+#    image: avian-frontend
+#    ports:
+#      - "3000:3000"
+#    depends_on:
+#      - avian_backend

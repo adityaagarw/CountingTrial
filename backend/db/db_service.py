@@ -11,7 +11,7 @@ class DBService:
         return cls._instance
 
     def init_db(self):
-        self.engine = create_engine('postgresql://avian-admin:avian-password@localhost:5432/avian-db')
+        self.engine = create_engine('postgresql://avian-admin:avian-password@avian_db:5432/avian-db')
         self.session_factory = sessionmaker(bind=self.engine)
         self.Session = scoped_session(self.session_factory)
 

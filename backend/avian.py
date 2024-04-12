@@ -6,7 +6,10 @@ import numpy as np
 import argparse
 import pandas as pd
 import json
-from backend.db.db_queries import DBQueries
+import os
+import fcntl
+import errno
+from db.db_queries import DBQueries
 
 class Avian:
     def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):
@@ -61,6 +64,7 @@ class Avian:
                                 query_obj = self.query_obj
                                 )
 
+
         while self.cap.isOpened():
             success, im0 = self.cap.read()
 
@@ -69,10 +73,10 @@ class Avian:
             if not success:
                 print("Video frame is empty or video processing has been successfully completed.")
                 break
-            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
+            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=True,
                                 classes=self.classes_to_count, conf=self.track_confidence)
-
-            for i in range(len(ee_counter_array)): 
+            
+            for i in range(len(ee_counter_array)):
                 im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
                 cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
 

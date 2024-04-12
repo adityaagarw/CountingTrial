@@ -1,7 +1,12 @@
 fastapi
+fastapi_utils
 uvicorn
 sqlalchemy
 psycopg2-binary
 passlib
 python-multipart
 bcrypt
+shapely
+pgvector
+lapx
+

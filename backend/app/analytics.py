@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi_utils.inferring_router import InferringRouter
 from pydantic import BaseModel, Field
 from db.db_service import DBService
-from sqlalchemy import select, func
+from sqlalchemy import select, func, extract
 from db.schema import DetectionData
 
 router = InferringRouter()
@@ -23,8 +23,12 @@ class QueryParameters(BaseModel):
 def get_all_feed_data(parameters: QueryParameters):
     where_clause = {}
 
-    query = select(DetectionData.attribute, func.count(DetectionData.id))
-
+    #query = select(DetectionData.attribute, func.count(DetectionData.id), func.date(DetectionData.added_at))
+    query = select(
+        DetectionData.attribute,
+        func.to_char(DetectionData.added_at, 'YYYY-MM-DD HH24:00').label('date'),
+        func.count(DetectionData.id)
+    )
     if parameters.from_datetime:
         query = query.filter(DetectionData.detection_time >= parameters.from_datetime)
     if parameters.to_datetime:
@@ -34,7 +38,11 @@ def get_all_feed_data(parameters: QueryParameters):
     if parameters.section_id:
         query = query.filter(DetectionData.section_id == parameters.section_id)
 
-    query = query.group_by(DetectionData.attribute)
+    #query = query.group_by(DetectionData.attribute, func.date(DetectionData.added_at))
+
+    # query to group by attributes
+
+    query = query.group_by(DetectionData.attribute, func.to_char(DetectionData.added_at, 'YYYY-MM-DD HH24:00'))    
 
     db = DBService().get_session()
 
