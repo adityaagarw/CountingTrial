@@ -10,12 +10,16 @@ from db.schema import Base, DetectionData
 from sqlalchemy import create_engine
 from typing import Set
 from fastapi import WebSocket, WebSocketDisconnect
+import json
+
 
 router = InferringRouter()
 
 engine = DBService().get_engine()
 
 connected_clients: Set[WebSocket] = set()
+
+messagesReceived = []
 
 # WebSocket route
 @router.websocket("/ws")
@@ -41,9 +45,15 @@ async def listen_for_notifications():
             conn.poll()
             if conn.notifies:
                 notify = conn.notifies.pop(0)
-                print("Received notification:", notify.payload)
-                await broadcast_notification(notify.payload)
-            await asyncio.sleep(0.1)  # Adjust as needed
+
+                message = json.loads(notify.payload)
+                if not message['uuid'] in  messagesReceived:
+                    messagesReceived.append(message['uuid'])
+                    print("Received notification:", notify.payload)
+                    await broadcast_notification(notify.payload)
+            
+            await asyncio.sleep(0.5)  # Adjust as needed
+            
         except psycopg2.errors.OperationalError:
             print("Connection disconnected. Reconnecting...")
             conn = engine.raw_connection()

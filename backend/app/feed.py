@@ -59,6 +59,14 @@ def getFeeds():
     feeds = db.query(FeedMaster).all()
     return feeds
 
+# Fetch all sections in a feed
+@router.get("/get-sections/{feed_id}")
+def getFeedSections(feed_id: int):
+    db = DBService().get_session()
+    section_ids = db.query(SectionMaster.id).filter(SectionMaster.feed_id == feed_id).all()
+    section_ids = [id[0] for id in section_ids]
+    return section_ids
+
 # Fetch all feed IDs
 @router.get("/get-feed-ids")
 def getFeedIds():
