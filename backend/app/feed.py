@@ -13,6 +13,7 @@ import errno
 from pydantic import Field
 from fastapi.responses import StreamingResponse, Response
 import json
+import platform
 
 router = APIRouter()
 
@@ -138,10 +139,12 @@ def stopFeed(feed_id: int):
     feed = db.query(PIDMaster).filter(PIDMaster.feed_id == feed_id).first()
     if feed is None:
         raise HTTPException(status_code=404, detail="Feed not found")
-    # On linux, use the following command
-    subprocess.Popen(['kill', '-9', str(feed.pid)])
-    # On windows, use the following command
-    #subprocess.Popen(['taskkill', '/F', '/T', '/PID', str(feed.pid)])
+    
+    #FIXME: Figure out better way to gracefully shutdown subprocess
+    if platform.system() == 'Windows':
+        subprocess.Popen(['taskkill', '/F', '/T', '/PID', str(feed.pid)])
+    else:
+        subprocess.Popen(['kill', '-9', str(feed.pid)])
     # Delete pid from db
     db.delete(feed)
     db.commit()
