@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, ForeignKey, Date, event
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -50,6 +50,7 @@ class FeedMaster(Base):
 
     # Define the relationship with the CameraMaster table
     camera = relationship("CameraMaster")
+
 
 
 class SectionMaster(Base):
@@ -154,6 +155,7 @@ with engine.connect() as connection:
     # Create the database
     trans = connection.begin() 
     connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+    connection.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"))
     trans.commit()
 
 # Bind the engine to the base class
@@ -161,3 +163,29 @@ Base.metadata.bind = engine
 
 # Create the tables based on the defined models if they don't already exist
 Base.metadata.create_all(engine)
+
+# Create table triggers
+with engine.connect() as connection:
+    # Create the database
+    trans = connection.begin() 
+    connection.execute("""
+        CREATE OR REPLACE FUNCTION public.notify_trigger()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        DECLARE
+            new_json JSON;
+        BEGIN
+            new_json := to_jsonb(NEW) || jsonb_build_object('uuid', uuid_generate_v4());
+            PERFORM pg_notify('detection_data_inserted', new_json::text);
+            RAISE NOTICE 'Trigger function notify_trigger() fired';
+            RETURN NEW;
+        END;
+        $$;
+
+        CREATE OR REPLACE TRIGGER detection_data_inserted
+        AFTER INSERT ON detection_data
+        FOR EACH ROW
+        EXECUTE FUNCTION public.notify_trigger();
+    """)
+    trans.commit()

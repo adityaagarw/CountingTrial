@@ -244,11 +244,11 @@ class ObjectCounter:
                                 self.object_info[track_id].entry_started = True
 
     def display_frames(self):
-        if self.env_check:
-            cv2.namedWindow("Avian Tech " + str(self.feed_id))
-            cv2.imshow("Avian Tech " + str(self.feed_id), self.im0)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                return
+        #if self.env_check:
+        cv2.namedWindow("Avian Tech " + str(self.feed_id))
+        cv2.imshow("Avian Tech " + str(self.feed_id), self.im0)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            return
 
     def start_counting(self, im0, tracks, fc):
         self.im0 = im0

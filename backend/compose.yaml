@@ -22,6 +22,13 @@ services:
       - DISPLAY=host.docker.internal:0
     stdin_open: true
     tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 #  avian_frontend:
 #    image: avian-frontend
 #    ports:

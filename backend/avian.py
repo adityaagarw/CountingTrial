@@ -73,7 +73,7 @@ class Avian:
             if not success:
                 print("Video frame is empty or video processing has been successfully completed.")
                 break
-            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=True,
+            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
                                 classes=self.classes_to_count, conf=self.track_confidence)
             
             for i in range(len(ee_counter_array)):

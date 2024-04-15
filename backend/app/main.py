@@ -25,6 +25,6 @@ app.add_middleware(
 )
 app.include_router(auth_router, prefix="/auth", tags=["User Auth"])
 app.include_router(camera_router, prefix="/camera", tags=["Camera"])
-app.include_router(detection_data_router, prefix="/stats", tags=["Statistics"])
+app.include_router(detection_data_router, prefix="/analytics", tags=["Analytics"])
 app.include_router(feed_router, prefix="/feed", tags=["Feed"])
 app.include_router(websocket_router, prefix="", tags=["WS"])

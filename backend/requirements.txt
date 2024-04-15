@@ -9,4 +9,4 @@ bcrypt
 shapely
 pgvector
 lapx
-
+websockets
