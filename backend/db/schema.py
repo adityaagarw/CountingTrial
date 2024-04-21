@@ -46,7 +46,7 @@ class FeedMaster(Base):
     added_at = Column(TIMESTAMP)
     modified_at = Column(TIMESTAMP)
     config = Column(String)
-
+    status = Column(String, default='stopped')
 
     # Define the relationship with the CameraMaster table
     camera = relationship("CameraMaster")

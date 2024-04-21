@@ -75,6 +75,23 @@ def getFeedIds():
     feed_ids = [id[0] for id in feed_ids]
     return feed_ids
 
+# Fetch feed status
+@router.get("/get-feed-status/{feed_id}")
+def getFeedStatus(feed_id: int):
+    db = DBService().get_session()
+    feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
+    if feed is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    return feed.status
+
+def setFeedStatus(feed_status, feed_id):
+    db = DBService().get_session()
+    feed = db.query(FeedMaster).filter(FeedMaster.id == feed_id).first()
+    if feed is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    feed.status = feed_status
+    db.commit()
+
 # Delete specific feed
 @router.delete("/delete-feed/{feed_id}")
 def deleteFeed(feed_id: int):
@@ -118,7 +135,6 @@ def feedImage(feed_id: int):
     return Response(img_encoded.tobytes(), media_type="image/jpeg")
 
 # Start feed
-#FIXME: Should run in conda environment
 @router.post("/start-feed/{feed_id}")
 def startFeed(feed_id: int):
     # Start the avian python program with the feed_id
@@ -135,7 +151,9 @@ def startFeed(feed_id: int):
         db.commit()
     else:
         feed.pid = proc.pid
-    return {"message": "Feed started successfully"}
+        
+    setFeedStatus("started", feed_id)
+    return "success"
 
 # Stop feed
 @router.post("/stop-feed/{feed_id}")
@@ -156,7 +174,8 @@ def stopFeed(feed_id: int):
     # Delete pid from db
     db.delete(feed)
     db.commit()
-    return {"message": "Feed stopped successfully"}
+    setFeedStatus("stopped", feed_id)
+    return "success"
 
 def save_section(db: Session, section: SectionMaster):
     db.add(section)
