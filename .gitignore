@@ -5,3 +5,5 @@ yolov8x.pt
 *.pt
 *.xlsx
 __pycache__/
+venv/
+ym_test.mp4

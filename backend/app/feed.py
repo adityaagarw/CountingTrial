@@ -136,7 +136,7 @@ def feedImage(feed_id: int):
 
 # Start feed
 @router.post("/start-feed/{feed_id}")
-def startFeed(feed_id: int):
+async def startFeed(feed_id: int):
     # Start the avian python program with the feed_id
     proc = subprocess.Popen(['python', 'avian.py', str(feed_id)])#, shell=True)
     # Store pid in db

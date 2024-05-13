@@ -148,6 +148,14 @@ class PIDMaster(Base):
     feed_id = Column(Integer)
     pid = Column(Integer)
 
+class SalesData(Base):
+    __tablename__ = "sales_data"
+
+    date = Column(TIMESTAMP, primary_key=True, index=True)
+    tot_invoices = Column(Integer)
+    tot_qty = Column(Integer)
+    tot_sales = Column(Integer)
+
 # Create an engine to connect to the PostgreSQL database using Docker
 engine = create_engine('postgresql://avian-admin:avian-password@avian_db:5432/avian-db')
 

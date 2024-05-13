@@ -258,7 +258,9 @@ class ObjectCounter:
         self.extract_and_process_tracks(tracks)
 
         if self.view_img:
-            self.display_frames()
+            #self.display_frames()
+            #   print('Feed ID: ',self.feed_id, ': ',self.frame_count, '\t',datetime.now())
+            pass
         return self.im0
 
 

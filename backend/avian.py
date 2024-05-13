@@ -1,5 +1,8 @@
 # AVIAN: Advanced Vision Analytics
+import asyncio
+import base64
 from ultralytics import YOLO
+import websockets
 import simple_counter as counter
 import cv2
 import numpy as np
@@ -10,6 +13,17 @@ import os
 import fcntl
 import errno
 from db.db_queries import DBQueries
+from connection_manager import ConnectionManager
+
+async def send_image_to_websocket(feed_id, im0, websocket):
+    # async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
+    #resize im0 to 250x250
+    im0 = cv2.resize(im0, (250, 250))
+    is_success, im_buf_arr = cv2.imencode(".jpg", im0)
+    byte_im = base64.b64encode(im_buf_arr).decode('utf-8')
+    data = json.dumps({'feed_id': feed_id, 'image': byte_im, 'type': 'stream'})
+    await websocket.send(data)
+          
 
 class Avian:
     def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):
@@ -30,7 +44,10 @@ class Avian:
         self.feed_id = feed_id
         self.camera_id = camera_id
         self.query_obj = query
+        self.manager = ConnectionManager()
+        self.websocket = None
 
+    
     def fast_forward_callback(self, event, x, y, flags, param):
         # On right mouse button click, fast forward the video by 250 frames
         if event == cv2.EVENT_RBUTTONDBLCLK:
@@ -40,8 +57,13 @@ class Avian:
             to_count = self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 if self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 250 > 0 else 0
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, to_count)
 
-    def run_tracker(self):
+    # Async function to send image stream to websocket
+    
+            
+
+    async def run_tracker(self):
         ee_counter_array = []
+
         for section in self.sections:
             if section.section_type == "entry_exit": #FIXME: Change to feature_id in future
                 ee_counter = counter.ObjectCounter(self.feed_id)
@@ -64,24 +86,27 @@ class Avian:
                                 query_obj = self.query_obj
                                 )
 
+        async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
+            while self.cap.isOpened():
+                success, im0 = self.cap.read()
 
-        while self.cap.isOpened():
-            success, im0 = self.cap.read()
+                im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
 
-            im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
+                if not success:
+                    print("Video frame is empty or video processing has been successfully completed.")
+                    break
+                
+                await send_image_to_websocket(self.feed_id, im0, websocket)
 
-            if not success:
-                print("Video frame is empty or video processing has been successfully completed.")
-                break
-            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
-                                classes=self.classes_to_count, conf=self.track_confidence)
-            
-            for i in range(len(ee_counter_array)):
-                im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-                cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
+                tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
+                                    classes=self.classes_to_count, conf=self.track_confidence)
+                
+                for i in range(len(ee_counter_array)):
+                    im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                    #cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
 
-        self.cap.release()
-        cv2.destroyAllWindows()
+            self.cap.release()
+            cv2.destroyAllWindows()
 
 def start_message():
     # Display ascii art
@@ -96,6 +121,7 @@ def start_message():
     print(" ....     ..       .. ..       ..      ....     ..   ..         .. ..")
     print(".....     ..       ....       ..      .....     ..  ..           ...")
     print("                     ADVANCED VISION ANALYTICS                      ")
+
 if __name__ == "__main__":
     print("Welcome to ...")
     start_message()
@@ -127,4 +153,4 @@ if __name__ == "__main__":
     #FIXME: Decide if multiple processes to be spawned for one multiple sections in a feed
     avian = Avian(section_obj, feed_url, config, args.feed_id, camera_id, query)
     # Call a new function for counting the objects in the video
-    avian.run_tracker()
+    asyncio.run(avian.run_tracker())
