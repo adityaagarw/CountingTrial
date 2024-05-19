@@ -13,7 +13,7 @@ import os
 import fcntl
 import errno
 from db.db_queries import DBQueries
-from connection_manager import ConnectionManager
+#from connection_manager import ConnectionManager
 
 async def send_image_to_websocket(feed_id, im0, websocket):
     # async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
@@ -44,7 +44,7 @@ class Avian:
         self.feed_id = feed_id
         self.camera_id = camera_id
         self.query_obj = query
-        self.manager = ConnectionManager()
+        #self.manager = ConnectionManager()
         self.websocket = None
 
     

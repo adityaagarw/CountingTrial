@@ -1,3 +1,5 @@
 ym_test.mp4
 .vscode/
 venv/
+uvicorn.log
+ym2.mp4

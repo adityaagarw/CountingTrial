@@ -16,8 +16,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 import json
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from connection_manager import ConnectionManager
-from websockets.exceptions import ConnectionClosed
+# from connection_manager import ConnectionManager
+# from websockets.exceptions import ConnectionClosed
 
 
 router = InferringRouter()
@@ -29,7 +29,7 @@ connected_clients_stream: Set[WebSocket] = set()
 
 messagesReceived = []
 
-manager = ConnectionManager()
+#manager = ConnectionManager()
 
 # WebSocket route
 @router.websocket("/ws")
