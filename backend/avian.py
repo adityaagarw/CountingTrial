@@ -47,7 +47,8 @@ class Avian:
         self.camera_id = camera_id
         self.query_obj = query
         #self.manager = ConnectionManager()
-        self.shm_test = shared_memory.SharedMemory(name='avian_test', create=True, size=4096000)
+        self.shm_name = "avian_shm_" + str(self.feed_id)
+        self.shm_test = shared_memory.SharedMemory(name=self.shm_name, create=True, size=4096000)
         self.websocket = None
 
     

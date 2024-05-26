@@ -85,13 +85,13 @@ async def broadcast_notification(payload: str):
         except WebSocketDisconnect:
             connected_clients.remove(client)
 
-async def broadcast_stream(image_bytes):
+async def broadcast_stream(image_bytes, feed_id):
     if image_bytes is None:
         return
 
     for client in connected_clients_stream.copy():  
         try:
-            await client.send_json({'feed_id': 1, "image": image_bytes, 'type': 'stream'})
+            await client.send_json({'feed_id': feed_id, "image": image_bytes, 'type': 'stream'})
         except WebSocketDisconnect:
             connected_clients_stream.remove(client)
 
@@ -118,8 +118,8 @@ def consume_data(buffer):
     return frame_bytes_to_send
     
 
-@router.websocket("/stream")
-async def stream_websocket_endpoint(streamsocket: WebSocket):
+@router.websocket("/stream/{feed_id}")
+async def stream_websocket_endpoint(streamsocket: WebSocket, feed_id: str):
     await streamsocket.accept()
     connected_clients_stream.add(streamsocket)
 
@@ -131,7 +131,8 @@ async def stream_websocket_endpoint(streamsocket: WebSocket):
         while True:
             if flag == 0:
                 try:
-                    shm_test = shared_memory.SharedMemory(name='avian_test')
+                    shm_name = "avian_shm_" + feed_id
+                    shm_test = shared_memory.SharedMemory(name=shm_name)
                     flag = 1
                 except:
                     data = 0
@@ -145,7 +146,7 @@ async def stream_websocket_endpoint(streamsocket: WebSocket):
             await asyncio.sleep(0.1) #TBD: Reduce and check behaviour
 
             if data != 0 or data is not None:
-                await broadcast_stream(data)
+                await broadcast_stream(data, feed_id)
 
     except WebSocketDisconnect:
         connected_clients_stream.remove(streamsocket)

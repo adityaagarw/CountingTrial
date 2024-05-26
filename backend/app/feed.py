@@ -14,6 +14,7 @@ from pydantic import Field
 from fastapi.responses import StreamingResponse, Response
 import json
 import platform
+from multiprocessing import shared_memory
 
 router = APIRouter()
 
@@ -174,6 +175,11 @@ def stopFeed(feed_id: int):
     # Delete pid from db
     db.delete(feed)
     db.commit()
+    #Free shared memory
+    shm_name = "avian_shm_" + str(feed_id)
+    shm = shared_memory.SharedMemory(name=shm_name)
+    shm.unlink()
+
     setFeedStatus("stopped", feed_id)
     return "success"
 
@@ -234,7 +240,7 @@ async def view_feed(feed_id: int):
     def generate():
         while True:
             try:
-                dimensions = os.read(pipe_fd, 3 *4)
+                dimensions = os.read(pipe_fd, 3 * 4)
                 width, height, size = np.frombuffer(dimensions, dtype=np.int32)
                 #struct.unpack('iii', dimensions)
                 frame_size = width * height * size
