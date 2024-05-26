@@ -14,11 +14,17 @@ from sqlalchemy import create_engine
 from typing import Set
 from fastapi import WebSocket, WebSocketDisconnect
 import json
+from datetime import datetime
+from multiprocessing import shared_memory
+import struct
+import array
+import numpy as np
+import cv2
+
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 # from connection_manager import ConnectionManager
 # from websockets.exceptions import ConnectionClosed
-
 
 router = InferringRouter()
 
@@ -80,9 +86,12 @@ async def broadcast_notification(payload: str):
             connected_clients.remove(client)
 
 async def broadcast_stream(image_bytes):
+    if image_bytes is None:
+        return
+
     for client in connected_clients_stream.copy():  
         try:
-            await client.send_json(image_bytes)
+            await client.send_json({'feed_id': 1, "image": image_bytes, 'type': 'stream'})
         except WebSocketDisconnect:
             connected_clients_stream.remove(client)
 
@@ -91,19 +100,53 @@ async def broadcast_stream(image_bytes):
 async def startup():
     asyncio.create_task(listen_for_notifications())
 
+def consume_data(buffer):
+    while struct.unpack('i', buffer[:4])[0] != 0:
+        pass
+    
+    buffer[:4] = array.array("i", [2]).tobytes()
+    frame_length = struct.unpack('i', buffer[4:8])[0] # get frame length
+    if frame_length == 0:
+        # Unlock
+        buffer[:4] = array.array("i", [0]).tobytes()
+        return None
+
+    frame_bytes = buffer[8:frame_length+8] # get frame bytes
+    buffer[:4] = array.array("i", [0]).tobytes()
+
+    frame_bytes_to_send = base64.b64encode(frame_bytes.tobytes()).decode()
+    return frame_bytes_to_send
+    
+
 @router.websocket("/stream")
 async def stream_websocket_endpoint(streamsocket: WebSocket):
     await streamsocket.accept()
     connected_clients_stream.add(streamsocket)
+
+    shm_test = None
+
+    flag = 0
     print("Stream Client connected", streamsocket)
     try:
         while True:
-            data = await streamsocket.receive_json()
-            # data_dict = json.loads(data)
-            # image_data = data_dict['image']
-            # image_bytes = base64.b64decode(image_data)
+            if flag == 0:
+                try:
+                    shm_test = shared_memory.SharedMemory(name='avian_test')
+                    flag = 1
+                except:
+                    data = 0
+                    await asyncio.sleep(0.1)
+                    continue
 
-            await broadcast_stream(data)
+            if flag == 1:
+                if shm_test != None:
+                    data = consume_data(shm_test.buf)
+                
+            await asyncio.sleep(0.1) #TBD: Reduce and check behaviour
+
+            if data != 0 or data is not None:
+                await broadcast_stream(data)
+
     except WebSocketDisconnect:
         connected_clients_stream.remove(streamsocket)
 

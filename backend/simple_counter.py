@@ -218,8 +218,8 @@ class ObjectCounter:
                     track_vector = [start_point, end_point]
 
                     if VectorUtils.check_intersection(track_vector, entry_line):
+                        cp = VectorUtils.cross_product(track_vector, entry_line)
                         if not self.object_info[track_id].entered :
-                            cp = VectorUtils.cross_product(track_vector, entry_line)
                             
                             if cp > 0 and self.object_info[track_id].entry_started:
                                 self.entry_count += 1
@@ -227,12 +227,12 @@ class ObjectCounter:
                                 curr_time = datetime.now()
                                 global_id = self.query_obj.new_global_id(self.camera_id, self.feed_id, self.region_id, self.frame_count, curr_time, curr_time)
                                 self.query_obj.record_entry_exit(self.feed_id, self.region_id, global_id, curr_time, "entry", curr_time, self.frame_count)
-                            elif cp < 0:
-                                self.object_info[track_id].exit_started = True
+                        if cp < 0:
+                            self.object_info[track_id].exit_started = True
                                 
                     if VectorUtils.check_intersection(track_vector, exit_line):
+                        cp = VectorUtils.cross_product(track_vector, exit_line)
                         if not self.object_info[track_id].exited:
-                            cp = VectorUtils.cross_product(track_vector, exit_line)
                             
                             if cp < 0 and self.object_info[track_id].exit_started:
                                 self.exit_count += 1
@@ -240,8 +240,8 @@ class ObjectCounter:
                                 curr_time = datetime.now()
                                 global_id = self.query_obj.new_global_id(self.camera_id, self.feed_id, self.region_id, self.frame_count, curr_time, curr_time)
                                 self.query_obj.record_entry_exit(self.feed_id, self.region_id, global_id, curr_time, "exit", curr_time, self.frame_count)
-                            elif cp > 0:
-                                self.object_info[track_id].entry_started = True
+                        if cp > 0:
+                            self.object_info[track_id].entry_started = True
 
     def display_frames(self):
         #if self.env_check:

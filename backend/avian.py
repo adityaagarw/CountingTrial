@@ -13,6 +13,9 @@ import os
 import fcntl
 import errno
 from db.db_queries import DBQueries
+from multiprocessing import shared_memory
+import struct
+import array
 #from connection_manager import ConnectionManager
 
 async def send_image_to_websocket(feed_id, im0, websocket):
@@ -23,7 +26,6 @@ async def send_image_to_websocket(feed_id, im0, websocket):
     byte_im = base64.b64encode(im_buf_arr).decode('utf-8')
     data = json.dumps({'feed_id': feed_id, 'image': byte_im, 'type': 'stream'})
     await websocket.send(data)
-          
 
 class Avian:
     def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):
@@ -45,6 +47,7 @@ class Avian:
         self.camera_id = camera_id
         self.query_obj = query
         #self.manager = ConnectionManager()
+        self.shm_test = shared_memory.SharedMemory(name='avian_test', create=True, size=4096000)
         self.websocket = None
 
     
@@ -58,9 +61,6 @@ class Avian:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, to_count)
 
     # Async function to send image stream to websocket
-    
-            
-
     async def run_tracker(self):
         ee_counter_array = []
 
@@ -86,27 +86,50 @@ class Avian:
                                 query_obj = self.query_obj
                                 )
 
-        async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
-            while self.cap.isOpened():
-                success, im0 = self.cap.read()
+        buffer = self.shm_test.buf
+        # async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
+        while self.cap.isOpened():
+            success, im0 = self.cap.read()
 
-                im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
+            im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
+            frame_to_send = im0            
+            frame_to_send = cv2.resize(frame_to_send, (250, 250))
 
-                if not success:
-                    print("Video frame is empty or video processing has been successfully completed.")
-                    break
-                
-                await send_image_to_websocket(self.feed_id, im0, websocket)
+            if not success:
+                print("Video frame is empty or video processing has been successfully completed.")
+                break
+            
+            # await send_image_to_websocket(self.feed_id, im0, websocket)
 
-                tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
-                                    classes=self.classes_to_count, conf=self.track_confidence)
-                
-                for i in range(len(ee_counter_array)):
-                    im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-                    #cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
+            tracks = self.model.track(np.ascontiguousarray(im0), persist=True, show=False, verbose=False,
+                                classes=self.classes_to_count, conf=self.track_confidence)
+            
+            for i in range(len(ee_counter_array)):
+                im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                #cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
 
-            self.cap.release()
-            cv2.destroyAllWindows()
+            while struct.unpack('i', buffer[:4])[0] != 0:
+                continue
+            
+            # lock for producer
+            buffer[:4] = array.array("i", [1]).tobytes()
+
+            # convert frame to bytes and get its length
+            is_success, im_buf_arr = cv2.imencode(".jpg", frame_to_send)
+            frame_bytes = im_buf_arr.tobytes()
+            frame_length = len(frame_bytes)
+
+            # put the length of frame bytes at next 4 bytes
+            buffer[4:8] = array.array("i", [frame_length]).tobytes()
+
+            # put actual frame bytes
+            buffer[8:frame_length+8] = frame_bytes
+
+            # unlock 
+            buffer[:4] = array.array("i", [0]).tobytes()
+
+        self.cap.release()
+        cv2.destroyAllWindows()
 
 def start_message():
     # Display ascii art
