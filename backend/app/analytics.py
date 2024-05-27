@@ -38,10 +38,14 @@ class SalesVsFootfallResponse(BaseModel):
 
 
 class TrendData(BaseModel):
-    monthly: dict
-    weekly: dict
-    daily: dict
-    hourly: dict
+    monthly_footfall: dict
+    weekly_footfall: dict
+    daily_footfall: dict
+    hourly_footfall: dict
+    monthly_sales: dict
+    weekly_sales: dict
+    daily_sales: dict
+    hourly_sales: dict
 
 async def get_trend_data():
     db = DBService().get_session()
@@ -68,6 +72,27 @@ async def get_trend_data():
             DetectionData.attribute == 'entry'
         ).scalar()
 
+        footfall_monthly_prev = db.query(func.count(DetectionData.id)).filter(
+            DetectionData.detection_time >= datetime.now() - timedelta(days=60),
+            DetectionData.detection_time <= datetime.now() - timedelta(days=30),
+            DetectionData.attribute == 'entry'
+        ).scalar()
+        footfall_weekly_prev = db.query(func.count(DetectionData.id)).filter(
+            DetectionData.detection_time >= datetime.now() - timedelta(days=14),
+            DetectionData.detection_time <= datetime.now() - timedelta(days=7),
+            DetectionData.attribute == 'entry'
+        ).scalar()
+        footfall_daily_prev = db.query(func.count(DetectionData.id)).filter(
+            DetectionData.detection_time >= datetime.now() - timedelta(days=2),
+            DetectionData.detection_time <= datetime.now() - timedelta(days=1),
+            DetectionData.attribute == 'entry'
+        ).scalar()
+        footfall_hourly_prev = db.query(func.count(DetectionData.id)).filter(
+            DetectionData.detection_time >= datetime.now() - timedelta(hours=2),
+            DetectionData.detection_time <= datetime.now() - timedelta(hours=1),
+            DetectionData.attribute == 'entry'
+        ).scalar()
+
         # Query for sales data
         sales_monthly = db.query(func.sum(SalesData.tot_sales)).filter(
             SalesData.date >= datetime.now() - timedelta(days=30),
@@ -86,22 +111,56 @@ async def get_trend_data():
             SalesData.date <= datetime.now()
         ).scalar()
 
+        sales_monthly_prev = db.query(func.sum(SalesData.tot_sales)).filter(
+            SalesData.date >= datetime.now() - timedelta(days=60),
+            SalesData.date <= datetime.now() - timedelta(days=30)
+        ).scalar()
+        sales_weekly_prev = db.query(func.sum(SalesData.tot_sales)).filter(
+            SalesData.date >= datetime.now() - timedelta(days=14),
+            SalesData.date <= datetime.now() - timedelta(days=7)
+        ).scalar()
+        sales_daily_prev = db.query(func.sum(SalesData.tot_sales)).filter(
+            SalesData.date >= datetime.now() - timedelta(days=2),
+            SalesData.date <= datetime.now() - timedelta(days=1)
+        ).scalar()
+        sales_hourly_prev = db.query(func.sum(SalesData.tot_sales)).filter(
+            SalesData.date >= datetime.now() - timedelta(hours=2),
+            SalesData.date <= datetime.now() - timedelta(hours=1)
+        ).scalar()
+
+
         trend_data = TrendData(
-            monthly={
-                "current": footfall_monthly,
-                "previous": 0  # Assuming no previous data
+            monthly_footfall={
+                "current": footfall_monthly if footfall_monthly else 0,
+                "previous": footfall_monthly_prev if footfall_monthly_prev else 0
             },
-            weekly={
-                "current": footfall_weekly,
-                "previous": 0  # Assuming no previous data
+            weekly_footfall={
+                "current": footfall_weekly if footfall_weekly else 0,
+                "previous": footfall_weekly_prev if footfall_weekly_prev else 0
             },
-            daily={
-                "current": footfall_daily,
-                "previous": 0  # Assuming no previous data
+            daily_footfall={
+                "current": footfall_daily if footfall_daily else 0,
+                "previous": footfall_daily_prev if footfall_daily_prev else 0
             },
-            hourly={
-                "current": footfall_hourly,
-                "previous": 0  # Assuming no previous data
+            hourly_footfall={
+                "current": footfall_hourly if footfall_hourly else 0,
+                "previous": footfall_hourly_prev if footfall_hourly_prev else 0
+            },
+            monthly_sales={
+                "current": sales_monthly if sales_monthly else 0,
+                "previous": sales_monthly_prev if sales_monthly_prev else 0
+            },
+            weekly_sales={
+                "current": sales_weekly if sales_weekly else 0,
+                "previous": sales_weekly_prev if sales_weekly_prev else 0
+            },
+            daily_sales={
+                "current": sales_daily if sales_daily else 0,
+                "previous": sales_daily_prev if sales_daily_prev else 0
+            },
+            hourly_sales={
+                "current": sales_hourly if sales_hourly else 0,
+                "previous": sales_hourly_prev if sales_daily_prev else 0
             }
         )
 

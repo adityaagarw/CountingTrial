@@ -66,8 +66,18 @@ async def listen_for_notifications():
                 message = json.loads(notify.payload)
                 if not message['uuid'] in  messagesReceived:
                     messagesReceived.append(message['uuid'])
-                    print("Received notification:", notify.payload)
-                    await broadcast_notification(notify.payload)
+
+                    # Add the 'type': 'notification' field
+                    message['type'] = 'notification'
+                    
+                    # Convert the updated message back to a JSON string
+                    updated_payload = json.dumps(message)
+                    
+                    # Print the received notification
+                    print("Received notification:", updated_payload)
+                    
+                    # Broadcast the updated notification
+                    await broadcast_notification(updated_payload)
             
             await asyncio.sleep(0.5)  # Adjust as needed
             
