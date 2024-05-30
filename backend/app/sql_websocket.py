@@ -20,6 +20,7 @@ import struct
 import array
 import numpy as np
 import cv2
+import logging
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
@@ -34,6 +35,7 @@ connected_clients: Set[WebSocket] = set()
 connected_clients_stream: Set[WebSocket] = set()
 
 messagesReceived = []
+logger = logging.getLogger(__name__)
 
 #manager = ConnectionManager()
 
@@ -127,11 +129,24 @@ def consume_data(buffer):
     frame_bytes_to_send = base64.b64encode(frame_bytes.tobytes()).decode()
     return frame_bytes_to_send
     
+async def close_websocket_connection(websocket: WebSocket):
+    try:
+        await websocket.close()
+    except Exception as e:
+        print(f"Error closing WebSocket connection: {e}")
+    finally:
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
+        if websocket in connected_clients_stream:
+            connected_clients_stream.remove(websocket)
 
 @router.websocket("/stream/{feed_id}")
 async def stream_websocket_endpoint(streamsocket: WebSocket, feed_id: str):
     await streamsocket.accept()
     connected_clients_stream.add(streamsocket)
+
+    for client in connected_clients_stream.copy():
+        logging.error("Connected Client: ", client)
 
     shm_test = None
 
@@ -157,9 +172,12 @@ async def stream_websocket_endpoint(streamsocket: WebSocket, feed_id: str):
 
             if data != 0 or data is not None:
                 await broadcast_stream(data, feed_id)
+                data = None
 
     except WebSocketDisconnect:
-        connected_clients_stream.remove(streamsocket)
+        shm_test.close()
+        shm_test.unlink()
+        await close_websocket_connection(streamsocket)
 
     # await manager.connect(websocket)
     # try:
