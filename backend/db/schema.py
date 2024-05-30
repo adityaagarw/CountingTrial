@@ -58,7 +58,7 @@ class SectionMaster(Base):
 
     id = Column(Integer, primary_key=True)
     camera_id = Column(Integer, ForeignKey('camera_master.id'))
-    feed_id = Column(Integer, ForeignKey('feed_master.id'))
+    feed_id = Column(Integer, ForeignKey('feed_master.id', ondelete="CASCADE"))
     coordinates = Column(String)
     section_name = Column(String)
     section_type = Column(String)

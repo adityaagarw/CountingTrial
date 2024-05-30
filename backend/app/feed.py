@@ -171,14 +171,14 @@ def stopFeed(feed_id: int):
     if platform.system() == 'Windows':
         subprocess.Popen(['taskkill', '/F', '/T', '/PID', str(feed.pid)])
     else:
-        subprocess.Popen(['kill', '-9', str(feed.pid)])
+        subprocess.Popen(['kill', '-15', str(feed.pid)])
     # Delete pid from db
     db.delete(feed)
     db.commit()
     #Free shared memory
-    shm_name = "avian_shm_" + str(feed_id)
-    shm = shared_memory.SharedMemory(name=shm_name)
-    shm.unlink()
+    # shm_name = "avian_shm_" + str(feed_id)
+    # shm = shared_memory.SharedMemory(name=shm_name)
+    # shm.unlink()
 
     setFeedStatus("stopped", feed_id)
     return "success"

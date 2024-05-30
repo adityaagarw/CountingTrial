@@ -35,5 +35,5 @@ EXPOSE 8000
 # Run uvicorn command inside the conda environment
 #CMD ["conda", "run", "-n", "ultralytics-env", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 #CMD ["sh", "-c", "conda run -n ultralytics-env uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug > /app/uvicorn.log 2>&1"]
-CMD ["sh", "-c", "conda init bash && . /opt/conda/etc/profile.d/conda.sh && conda activate ultralytics-env && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug > /app/uvicorn.log 2>&1"]
+CMD ["sh", "-c", "conda init bash && . /opt/conda/etc/profile.d/conda.sh && conda activate ultralytics-env && uvicorn app.main:app --log-level error --host 0.0.0.0 --port 8000 --reload > /app/uvicorn.log 2>&1"]
 #CMD ["tail", "-f", "/dev/null"]

@@ -16,6 +16,8 @@ from db.db_queries import DBQueries
 from multiprocessing import shared_memory
 import struct
 import array
+import signal
+import sys
 #from connection_manager import ConnectionManager
 
 async def send_image_to_websocket(feed_id, im0, websocket):
@@ -50,7 +52,15 @@ class Avian:
         self.shm_name = "avian_shm_" + str(self.feed_id)
         self.shm_test = shared_memory.SharedMemory(name=self.shm_name, create=True, size=4096000)
         self.websocket = None
-
+        signal.signal(signal.SIGTERM, self.sigterm_handler)
+    
+    def sigterm_handler(self, signum, frame):
+        print('SIGTERM received, closing resources for feed id: ', self.feed_id)
+        self.cap.release()
+        cv2.destroyAllWindows()
+        self.shm_test.close()
+        self.shm_test.unlink()
+        sys.exit(0)
     
     def fast_forward_callback(self, event, x, y, flags, param):
         # On right mouse button click, fast forward the video by 250 frames
@@ -92,9 +102,12 @@ class Avian:
         while self.cap.isOpened():
             success, im0 = self.cap.read()
 
-            im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
-            frame_to_send = im0            
-            frame_to_send = cv2.resize(frame_to_send, (250, 250))
+            if im0 is not None:
+                im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
+                frame_to_send = im0      
+                frame_to_send = cv2.resize(frame_to_send, (250, 250))
+            else:
+                continue
 
             if not success:
                 print("Video frame is empty or video processing has been successfully completed.")
@@ -109,8 +122,13 @@ class Avian:
                 im0 = ee_counter_array[i].start_counting(np.ascontiguousarray(im0), tracks, self.cap.get(cv2.CAP_PROP_POS_FRAMES))
                 #cv2.setMouseCallback("Avian Tech " + str(self.feed_id), self.fast_forward_callback)
 
-            while struct.unpack('i', buffer[:4])[0] != 0:
-                continue
+            # Wait for unlock: TBD, continuing for now
+            # while struct.unpack('i', buffer[:4])[0] != 0:
+            #     continue
+            
+            
+            #!!!NOTE: Ideally frame should be copied to a staging area first. Locking and copying to final location should be done
+            # in another thread altogether. No sleep or wait should be added when reading RTSP Streams.
             
             # lock for producer
             buffer[:4] = array.array("i", [1]).tobytes()
