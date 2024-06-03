@@ -269,8 +269,10 @@ def get_all_feed_data(parameters: QueryParameters):
         func.count(DetectionData.id)
     )
     if parameters.from_datetime:
+        parameters.from_datetime = parameters.from_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
         query = query.filter(DetectionData.detection_time >= parameters.from_datetime)
     if parameters.to_datetime:
+        parameters.to_datetime = parameters.to_datetime.replace(hour=23, minute=59, second=59, microsecond=0)
         query = query.filter(DetectionData.detection_time <= parameters.to_datetime)
     if parameters.feed_id:
         query = query.filter(DetectionData.feed_id == parameters.feed_id)

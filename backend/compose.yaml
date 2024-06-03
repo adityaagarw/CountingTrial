@@ -15,7 +15,7 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "8181:8000"
     depends_on:
       - avian_db
     environment:

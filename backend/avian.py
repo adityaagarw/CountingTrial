@@ -18,6 +18,8 @@ import struct
 import array
 import signal
 import sys
+import threading
+
 #from connection_manager import ConnectionManager
 
 async def send_image_to_websocket(feed_id, im0, websocket):
@@ -29,7 +31,19 @@ async def send_image_to_websocket(feed_id, im0, websocket):
     data = json.dumps({'feed_id': feed_id, 'image': byte_im, 'type': 'stream'})
     await websocket.send(data)
 
+class CameraThread(threading.Thread):
+        def __init__(self, camera, name='CameraThread'):
+            self.camera = camera
+            self.last_frame = None
+            super(CameraThread, self).__init__(name=name)
+            self.start()
+
+        def run(self):
+            while True:
+                ret, self.last_frame = self.camera.read() 
+
 class Avian:
+           
     def __init__(self, section_obj, feed_url, config, feed_id, camera_id, query):
         self.video_path = feed_url
         self.model = YOLO(config["model_name"])
@@ -98,9 +112,12 @@ class Avian:
                                 )
 
         buffer = self.shm_test.buf
+        cam_thread = CameraThread(self.cap)
         # async with websockets.connect("ws://127.0.0.1:8000/stream") as websocket:
         while self.cap.isOpened():
-            success, im0 = self.cap.read()
+            im0 = cam_thread.last_frame
+            
+            # success, im0 = self.cap.read()
 
             if im0 is not None:
                 im0 = cv2.resize(im0, (int(self.format_width), int(self.format_height)))
@@ -109,9 +126,9 @@ class Avian:
             else:
                 continue
 
-            if not success:
-                print("Video frame is empty or video processing has been successfully completed.")
-                break
+            # if not success:
+            #     print("Video frame is empty or video processing has been successfully completed.")
+            #     break
             
             # await send_image_to_websocket(self.feed_id, im0, websocket)
 
